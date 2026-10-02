@@ -1,20 +1,26 @@
 # Changelog
 
+## 0.3.0-alpha - 2026-10-02
+
+- Replaced FBX/OBJ geometry transport with Rizom-Lab's official RizomUVLink direct API.
+- Added Python/PySide6 bridge core for 3ds Max 2027.
+- Added automatic discovery of the RizomUVLink module installed with RizomUV.
+- Added fileless polygon transfer using PolySizes, PolyXYZIDs, CoordsXYZ, PolyUVWIDs and CoordsUVW.
+- Added explicit 3ds Max Z-up to RizomUV Y-up coordinate conversion.
+- Added direct UV retrieval with `Save({"Data": True})`.
+- Added topology guards against changed polygon sizes and polygon XYZ IDs.
+- Added source-topology revalidation before UV paste.
+- Retained ChannelInfo only for the final UV-channel paste to the untouched source node.
+- Retired the MAXScript geometry core and file-based exchange path.
+- Added Python syntax compilation to CI.
+
 ## 0.2.0-alpha - 2026-10-02
 
-- Replaced the FBX transport with a custom topology-preserving OBJ transport.
-- Removed `snapshot()`; Autodesk documents it as producing a world-state mesh, which can triangulate polygon topology before export.
-- Removed dependency on 3ds Max FBX and OBJ importer/exporter plug-ins for geometry transport.
-- Added direct polygon OBJ writer using Editable Poly face arrays.
-- Added direct OBJ result parser.
-- Added topology-signature validation before any UV data is applied.
-- Added direct UV reconstruction on a temporary Editable Poly clone.
-- Kept `ChannelInfo` only for the final UV-channel paste back to the untouched source node.
-- Added static checks that forbid snapshot, FBX, built-in OBJ import/export, and generic import/export calls from the core.
+- Experimental custom OBJ transport. Runtime validation exposed axis/orientation and mesh interpretation problems; retired.
 
 ## 0.1.3-alpha - 2026-10-02
 
-- Attempted FBX topology-preservation settings. Runtime validation showed triangulation still occurred.
+- Experimental FBX topology-preservation settings. Runtime validation still showed unacceptable geometry behavior; retired.
 
 ## 0.1.2-alpha - 2026-10-02
 
