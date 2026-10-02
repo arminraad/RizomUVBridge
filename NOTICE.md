@@ -1,9 +1,13 @@
 # Notice
 
-This repository contains a separately written implementation of a 3ds Max ↔ RizomUV UV exchange workflow.
+This repository contains a separately maintained 3ds Max 2027 bridge implementation.
 
-The earlier public project at `TitusLVR/RizomuvBridge` was reviewed to understand the historical workflow and expected user experience.
+The historical workflow was informed by the public `TitusLVR/RizomuvBridge` project. At project initialization, that upstream repository did not expose a license file, so its MAXScript source is not redistributed here.
 
-At the time this repository was initialized, no license file was present in that upstream repository. For that reason, the implementation in this repository avoids copying the upstream MAXScript source and does not claim that upstream code is licensed for redistribution.
+## RizomUVLink
 
-RizomUV is a product of Rizom-Lab. 3ds Max and FBX are Autodesk technologies. Product names are used only to describe interoperability.
+Version 0.3.0-alpha uses the public integration API provided by **RizomUVLink**, authored by Rizom-Lab / Remi Arquier and released under the MIT License.
+
+This repository does not bundle RizomUVLink binaries. At runtime it loads the `RizomUVLink` folder installed with the user's RizomUV installation.
+
+RizomUV is a product of Rizom-Lab. 3ds Max is an Autodesk product. Product names are used only to describe interoperability.
