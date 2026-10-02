@@ -4,7 +4,7 @@ A topology-preserving bridge for Autodesk 3ds Max 2027 and RizomUV.
 
 ## Current status
 
-Version `0.3.1-alpha` replaces the experimental file-transport implementations with Rizom-Lab's official **RizomUVLink** API.
+Version `0.3.2-alpha` replaces the experimental file-transport implementations with Rizom-Lab's official **RizomUVLink** API.
 
 The draft is still under runtime validation and must not be considered production-ready yet.
 
@@ -76,8 +76,19 @@ Drag the MZP into the 3ds Max viewport.
 
 The installer places the Python module in the user Python scripts directory and registers the `AR Tools > RizomUV Bridge 2027` macro.
 
+## RizomUV executable path
+
+The bridge stores the selected `rizomuv.exe` path persistently in:
+
+```text
+<3ds Max user scripts>/Python/RizomUVBridgeSettings.json
+```
+
+Use **Set RizomUV EXE** once. The saved path is reused across 3ds Max restarts and bridge reinstalls. Registry discovery is only a fallback.
+
 ## Usage
 
+- **Set RizomUV EXE** — select `rizomuv.exe` once and save the path.
 - **Send New UV** — send current evaluated polygon topology with a fresh UVW seed.
 - **Send Edit UV** — send current evaluated polygon topology plus the selected existing UV channel.
 - Work in RizomUV.
