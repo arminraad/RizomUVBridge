@@ -1,5 +1,5 @@
 /*
-RizomUVBridge 0.1.2-alpha
+RizomUVBridge 0.1.3-alpha
 Target: Autodesk 3ds Max 2027 / 2027.1
 Purpose: Non-destructive UV round-trip between 3ds Max and RizomUV.
 
@@ -18,7 +18,7 @@ struct RUVB2027SessionItem
 
 struct RUVB2027Core
 (
-    version = "0.1.2-alpha",
+    version = "0.1.3-alpha",
     sessionItems = #(),
     sourceHandles = #(),
     waitingForResult = false,
@@ -237,10 +237,11 @@ struct RUVB2027Core
         try(FBXExporterSetParam "EmbedTextures" false)catch()
         try(FBXExporterSetParam "GenerateLog" false)catch()
         try(FBXExporterSetParam "SmoothingGroups" true)catch()
-        try(FBXExporterSetParam "SmoothMeshExport" true)catch()
+        try(FBXExporterSetParam "SmoothMeshExport" false)catch()
         try(FBXExporterSetParam "TangentSpaceExport" false)catch()
-        try(FBXExporterSetParam "Preserveinstances" false)catch()
+        try(FBXExporterSetParam "PreserveInstances" false)catch()
         try(FBXExporterSetParam "Triangulate" false)catch()
+        try(FBXExporterSetParam "PreserveEdgeOrientation" false)catch()
         try(FBXExporterSetParam "UpAxis" "Y")catch()
 
         true
@@ -265,6 +266,7 @@ struct RUVB2027Core
     (
         if tempNodes.count == 0 then return false
 
+        try(FBXExporterSetParam "PushSettings")catch()
         configureFBXExport()
 
         select tempNodes
@@ -278,6 +280,8 @@ struct RUVB2027Core
         (
             ok = false
         )
+
+        try(FBXExporterSetParam "PopSettings")catch()
 
         with undo off
         (
