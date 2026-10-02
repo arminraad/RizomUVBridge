@@ -3,31 +3,13 @@ category:"AR Tools"
 buttonText:"RizomUV Bridge 2027"
 toolTip:"RizomUV Bridge for 3ds Max 2027"
 (
-    global RUVB_ShowDialog
+    local pyDir = substituteString ((getDir #userScripts) + "\\Python") "\\" "/"
+    local cmd = "import sys; p=r'" + pyDir + "'; sys.path.insert(0,p) if p not in sys.path else None; import ar_rizomuv_bridge; ar_rizomuv_bridge.show()"
 
-    local bridgeScript = (getDir #userScripts) + "\\RizomUVBridge\\RizomUVBridge.ms"
-    local loadError = undefined
+    local result = python.Execute cmd throwOnError:false
 
-    if doesFileExist bridgeScript then
+    if result != #success do
     (
-        if executeScriptFile bridgeScript errormessage:&loadError then
-        (
-            if RUVB_ShowDialog != undefined then
-            (
-                RUVB_ShowDialog()
-            )
-            else
-            (
-                messageBox "RizomUVBridge loaded, but its global dialog entry point is unavailable." title:"RizomUVBridge"
-            )
-        )
-        else
-        (
-            messageBox ("RizomUVBridge failed to load.\n\n" + (loadError as string)) title:"RizomUVBridge"
-        )
-    )
-    else
-    (
-        messageBox ("RizomUVBridge core script was not found:\n" + bridgeScript) title:"RizomUVBridge"
+        messageBox ("RizomUVBridge Python launch failed.\n\n" + python.GetLastError()) title:"RizomUVBridge"
     )
 )
