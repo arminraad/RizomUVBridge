@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2-alpha - 2026-10-02
+
+- Added explicit **Set RizomUV EXE** button.
+- Added persistent `RizomUVBridgeSettings.json` storage for the selected executable.
+- Saved executable path now takes priority over Windows registry discovery.
+- Missing/invalid executable path now opens the file picker instead of hard-failing on registry lookup.
+- Bundled RizomUVLink discovery no longer depends on a registered RizomUV installation.
+- Connection Info now reports the saved executable path and settings-file location.
+
+
 ## 0.3.1-alpha - 2026-10-02
 
 - Removed the runtime dependency on RizomUV shipping a local `RizomUVLink` folder.
