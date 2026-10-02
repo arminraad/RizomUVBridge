@@ -87,6 +87,34 @@ if ($macro -match '(?s)fileIn\s+bridgeScript.*?RUVB_ShowDialog\(\)' -and $macro 
     throw "Macro can shadow RUVB_ShowDialog as an implicit local."
 }
 
+# MAXScript structure member functions are lexically scoped. A call to a member
+# declared later in the same struct can be captured as an implicit local and
+# evaluate to undefined at runtime. Reject all such forward references.
+$structStart = $core.IndexOf("struct RUVB2027Core")
+$structEndMarker = "RUVB2027 = RUVB2027Core()"
+$structEnd = $core.IndexOf($structEndMarker)
+
+if ($structStart -lt 0 -or $structEnd -lt 0 -or $structEnd -le $structStart) {
+    throw "Could not isolate RUVB2027Core for dependency-order validation."
+}
+
+$structSource = $core.Substring($structStart, $structEnd - $structStart)
+$fnMatches = [regex]::Matches($structSource, '(?m)^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\b')
+
+for ($i = 0; $i -lt $fnMatches.Count; $i++) {
+    $caller = $fnMatches[$i].Groups[1].Value
+    $bodyStart = $fnMatches[$i].Index
+    $bodyEnd = if ($i + 1 -lt $fnMatches.Count) { $fnMatches[$i + 1].Index } else { $structSource.Length }
+    $body = $structSource.Substring($bodyStart, $bodyEnd - $bodyStart)
+
+    for ($j = $i + 1; $j -lt $fnMatches.Count; $j++) {
+        $callee = $fnMatches[$j].Groups[1].Value
+        if ([regex]::IsMatch($body, ('\b' + [regex]::Escape($callee) + '\s*\('), [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+            throw "Forward struct-member reference detected: $caller -> $callee. Reorder the functions before packaging."
+        }
+    }
+}
+
 if (Get-ChildItem $repoRoot -Recurse -File -Filter "*.mse") {
     throw "Encrypted MSE files are not allowed in this repository."
 }
