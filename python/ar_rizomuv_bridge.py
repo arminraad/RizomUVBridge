@@ -1,6 +1,6 @@
 """
 RizomUVBridge for Autodesk 3ds Max 2027
-Version 0.3.0-alpha
+Version 0.3.2-alpha
 
 Direct, fileless bridge using Rizom-Lab's installed RizomUVLink module.
 
@@ -15,6 +15,7 @@ Design invariants:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -28,8 +29,9 @@ from pymxs import runtime as rt
 from qtmax import GetQMaxMainWindow
 
 
-VERSION = "0.3.1-alpha"
+VERSION = "0.3.2-alpha"
 MODULE_NAME = "ar_rizomuv_bridge"
+SETTINGS_PATH = Path(__file__).resolve().parent / "RizomUVBridgeSettings.json"
 
 
 @dataclass
@@ -59,12 +61,40 @@ _session: Optional[BridgeSession] = None
 _dialog = None
 
 
-def _find_rizom_install_dir() -> Path:
-    """Find the newest installed RizomUV using Rizom-Lab's Windows registry keys."""
+def _load_settings() -> dict:
+    try:
+        if SETTINGS_PATH.is_file():
+            with SETTINGS_PATH.open("r", encoding="utf-8") as stream:
+                data = json.load(stream)
+            if isinstance(data, dict):
+                return data
+    except Exception as exc:
+        print(f"RizomUVBridge: could not read settings: {exc}")
+    return {}
+
+
+def _save_settings(data: dict) -> None:
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = SETTINGS_PATH.with_suffix(".tmp")
+    with temp_path.open("w", encoding="utf-8") as stream:
+        json.dump(data, stream, indent=2, ensure_ascii=False)
+    temp_path.replace(SETTINGS_PATH)
+
+
+def _saved_rizom_exe() -> Optional[Path]:
+    value = _load_settings().get("rizomuv_exe")
+    if not value:
+        return None
+    exe = Path(value)
+    return exe if exe.is_file() else None
+
+
+def _registry_rizom_exe() -> Optional[Path]:
+    """Return the newest registered RizomUV executable, or None."""
     try:
         root = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Rizom Lab")
-    except FileNotFoundError as exc:
-        raise RuntimeError("RizomUV installation was not found in the Windows registry.") from exc
+    except FileNotFoundError:
+        return None
 
     versions = []
     with root:
@@ -85,17 +115,73 @@ def _find_rizom_install_dir() -> Path:
                     exe_path = winreg.QueryValue(key, "rizomuv.exe")
                 exe = Path(exe_path)
                 if exe.is_file():
-                    return exe.parent
+                    return exe
             except (FileNotFoundError, OSError):
                 continue
 
-    raise RuntimeError("RizomUV executable was not found in registered installations.")
+    return None
+
+
+def _choose_rizom_exe(parent=None) -> Optional[Path]:
+    start_dir = ""
+    saved = _load_settings().get("rizomuv_exe")
+    if saved:
+        candidate = Path(saved)
+        start_dir = str(candidate.parent if candidate.parent.is_dir() else Path.home())
+
+    file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+        parent,
+        "Select RizomUV executable",
+        start_dir,
+        "RizomUV executable (rizomuv.exe);;Executable files (*.exe);;All files (*)",
+    )
+
+    if not file_path:
+        return None
+
+    exe = Path(file_path)
+    if not exe.is_file() or exe.suffix.lower() != ".exe":
+        raise RuntimeError("The selected RizomUV path is not a valid executable.")
+
+    settings = _load_settings()
+    settings["rizomuv_exe"] = str(exe)
+    _save_settings(settings)
+    return exe
+
+
+def _resolve_rizom_exe(prompt_if_missing: bool = True, parent=None) -> Path:
+    saved = _saved_rizom_exe()
+    if saved is not None:
+        return saved
+
+    registered = _registry_rizom_exe()
+    if registered is not None:
+        settings = _load_settings()
+        settings["rizomuv_exe"] = str(registered)
+        _save_settings(settings)
+        return registered
+
+    if prompt_if_missing:
+        chosen = _choose_rizom_exe(parent)
+        if chosen is not None:
+            return chosen
+
+    raise RuntimeError(
+        "RizomUV executable is not configured. Click 'Set RizomUV EXE' and select rizomuv.exe once."
+    )
 
 
 def _candidate_link_dirs():
     bundled = Path(__file__).resolve().parent / "RizomUVBridgeVendor" / "RizomUVLink"
-    installed = _find_rizom_install_dir() / "RizomUVLink"
-    return [bundled, installed]
+    candidates = [bundled]
+
+    exe = _saved_rizom_exe() or _registry_rizom_exe()
+    if exe is not None:
+        installed = exe.parent / "RizomUVLink"
+        if installed != bundled:
+            candidates.append(installed)
+
+    return candidates
 
 
 def _import_rizomuv_link():
@@ -150,7 +236,7 @@ def _ensure_link():
     link = module.CRizomUVLink()
 
     try:
-        rizom_exe = str(_find_rizom_install_dir() / "rizomuv.exe")
+        rizom_exe = str(_resolve_rizom_exe(prompt_if_missing=True, parent=_dialog))
         port = link.RunRizomUV(exePath=rizom_exe)
     except Exception as exc:
         raise RuntimeError(f"RizomUVLink could not launch/connect to RizomUV: {exc}") from exc
@@ -528,12 +614,21 @@ def get_uvs_from_rizom():
     return f"UV channel {_session.uv_channel} applied to {applied} object(s)."
 
 
+def set_rizom_executable(parent=None):
+    exe = _choose_rizom_exe(parent)
+    if exe is None:
+        return "RizomUV executable path unchanged."
+    return f"Saved RizomUV executable: {exe}"
+
+
 def connection_info():
+    exe = _resolve_rizom_exe(prompt_if_missing=True, parent=_dialog)
     module = _import_rizomuv_link()
     link_dir = _link_source
     return (
         f"3ds Max Python: {sys.version.split()[0]}\n"
-        f"RizomUV executable: {_find_rizom_install_dir() / 'rizomuv.exe'}\n"
+        f"RizomUV executable: {exe}\n"
+        f"Settings: {SETTINGS_PATH}\n"
         f"RizomUVLink source: {link_dir}\n"
         f"RizomUVLink module: {getattr(module, '__file__', 'unknown')}\n"
         "Transport: direct memory/API (no FBX/OBJ)"
@@ -545,7 +640,7 @@ class BridgeDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle("RizomUV Bridge 2027")
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowType.Tool)
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(500)
 
         self.version_label = QtWidgets.QLabel(
             f"Version {VERSION} — Direct RizomUVLink"
@@ -563,6 +658,7 @@ class BridgeDialog(QtWidgets.QDialog):
         self.send_new = QtWidgets.QPushButton("Send New UV")
         self.send_edit = QtWidgets.QPushButton("Send Edit UV")
         self.get_uvs = QtWidgets.QPushButton("Get UVs")
+        self.set_exe = QtWidgets.QPushButton("Set RizomUV EXE")
         self.info = QtWidgets.QPushButton("Connection Info")
 
         send_row = QtWidgets.QHBoxLayout()
@@ -571,6 +667,7 @@ class BridgeDialog(QtWidgets.QDialog):
 
         get_row = QtWidgets.QHBoxLayout()
         get_row.addWidget(self.get_uvs)
+        get_row.addWidget(self.set_exe)
         get_row.addWidget(self.info)
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -583,6 +680,7 @@ class BridgeDialog(QtWidgets.QDialog):
         self.send_new.clicked.connect(lambda: self._send(False))
         self.send_edit.clicked.connect(lambda: self._send(True))
         self.get_uvs.clicked.connect(self._get)
+        self.set_exe.clicked.connect(self._set_exe)
         self.info.clicked.connect(self._info)
 
     def _run(self, label, fn):
@@ -603,6 +701,12 @@ class BridgeDialog(QtWidgets.QDialog):
 
     def _get(self):
         self._run("Reading UVs directly from RizomUV...", get_uvs_from_rizom)
+
+    def _set_exe(self):
+        self._run(
+            "Selecting RizomUV executable...",
+            lambda: set_rizom_executable(self),
+        )
 
     def _info(self):
         self._run("Checking connection...", connection_info)
