@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 $requiredFiles = @(
-    "src\RizomUVBridge.ms",
+    "python\ar_rizomuv_bridge.py",
     "macros\AR_RizomUVBridge.mcr",
     "install.ms",
     "mzp.run",
@@ -18,108 +18,66 @@ foreach ($relativePath in $requiredFiles) {
     }
 }
 
-$core = Get-Content (Join-Path $repoRoot "src\RizomUVBridge.ms") -Raw
+$pythonCore = Get-Content (Join-Path $repoRoot "python\ar_rizomuv_bridge.py") -Raw
 $macro = Get-Content (Join-Path $repoRoot "macros\AR_RizomUVBridge.mcr") -Raw
 $installer = Get-Content (Join-Path $repoRoot "install.ms") -Raw
+$package = Get-Content (Join-Path $repoRoot "build\package.ps1") -Raw
 
-$coreRequired = @(
-    'global RUVB_ShowDialog',
-    'majorCode >= 29000',
-    'copy sourceNode',
-    'convertToPoly tempNode',
-    '(exchangeBase()) + ".obj"',
-    '(exchangeBase()) + "_out.obj"',
-    'fn writeObjExchange',
-    'polyOp.getFaceVerts',
-    'local line = "f"',
-    'fn readObjResult',
-    'fn topologyMatchesSession',
-    'channelInfo.CopyChannel',
-    'channelInfo.PasteChannel',
-    'ZomLoad({File={Path=',
-    'Prefs.FileSuffix',
-    'shellLaunch exe args'
+$requiredPythonTokens = @(
+    'VERSION = "0.3.0-alpha"',
+    'import RizomUVLink',
+    'CRizomUVLink()',
+    '"Data.PolySizes"',
+    '"Data.PolyXYZIDs"',
+    '"Data.CoordsXYZ"',
+    '"Data.PolyUVWIDs"',
+    '"Data.CoordsUVW"',
+    'link.Load(params)',
+    'link.Save({"Data": True})',
+    'return float(point.x), float(point.z), float(-point.y)',
+    'rt.ChannelInfo.CopyChannel',
+    'rt.ChannelInfo.PasteChannel',
+    'Geometry topology changed in RizomUV'
 )
 
-foreach ($token in $coreRequired) {
-    if (-not $core.Contains($token)) {
-        throw "Core script is missing expected token: $token"
+foreach ($token in $requiredPythonTokens) {
+    if (-not $pythonCore.Contains($token)) {
+        throw "Python core is missing expected token: $token"
     }
 }
 
-$forbiddenCorePatterns = @(
-    'snapshot sourceNode',
+$forbiddenPythonTokens = @(
+    'rt.snapshot',
     'snapshotAsMesh',
+    'rt.exportFile',
+    'rt.importFile',
     'FBXEXP',
     'FBXIMP',
-    'FBXExporterSetParam',
-    'FBXImporterSetParam',
     'ObjExp',
-    'ObjImp',
-    'exportFile ',
-    'importFile '
+    'ObjImp'
 )
 
-foreach ($pattern in $forbiddenCorePatterns) {
-    if ($core.Contains($pattern)) {
-        throw "Topology-preserving core still contains forbidden transport path: $pattern"
+foreach ($token in $forbiddenPythonTokens) {
+    if ($pythonCore.Contains($token)) {
+        throw "Direct-link core contains forbidden geometry transport: $token"
     }
 }
 
-$macroRequired = @(
-    'global RUVB_ShowDialog',
-    'executeScriptFile bridgeScript errormessage:&loadError',
-    'if RUVB_ShowDialog != undefined'
-)
-
-foreach ($token in $macroRequired) {
-    if (-not $macro.Contains($token)) {
-        throw "Macro is missing expected token: $token"
-    }
+if (-not $macro.Contains('python.Execute')) {
+    throw "Macro does not launch the Python bridge."
 }
 
-$installerRequired = @(
-    'fn RUVB_Install',
-    'global RUVB_ShowDialog',
-    'executeScriptFile targetScript errormessage:&coreError',
-    'executeScriptFile targetMacro errormessage:&macroError',
-    'RUVB_ShowDialog()'
-)
-
-foreach ($token in $installerRequired) {
-    if (-not $installer.Contains($token)) {
-        throw "Installer is missing expected token: $token"
-    }
+if (-not $installer.Contains('legacyCore')) {
+    throw "Installer does not remove the retired MAXScript core."
 }
 
-# Reject forward calls between RUVB2027Core member functions.
-$structStart = $core.IndexOf("struct RUVB2027Core")
-$structEndMarker = "RUVB2027 = RUVB2027Core()"
-$structEnd = $core.IndexOf($structEndMarker)
-
-if ($structStart -lt 0 -or $structEnd -lt 0 -or $structEnd -le $structStart) {
-    throw "Could not isolate RUVB2027Core for dependency-order validation."
+if ($package.Contains('src\RizomUVBridge.ms')) {
+    throw "Package still includes the retired MAXScript geometry core."
 }
 
-$structSource = $core.Substring($structStart, $structEnd - $structStart)
-$fnMatches = [regex]::Matches($structSource, '(?m)^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\b')
-
-for ($i = 0; $i -lt $fnMatches.Count; $i++) {
-    $caller = $fnMatches[$i].Groups[1].Value
-    $bodyStart = $fnMatches[$i].Index
-    $bodyEnd = if ($i + 1 -lt $fnMatches.Count) { $fnMatches[$i + 1].Index } else { $structSource.Length }
-    $body = $structSource.Substring($bodyStart, $bodyEnd - $bodyStart)
-
-    for ($j = $i + 1; $j -lt $fnMatches.Count; $j++) {
-        $callee = $fnMatches[$j].Groups[1].Value
-        if ([regex]::IsMatch($body, ('\b' + [regex]::Escape($callee) + '\s*\('), [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
-            throw "Forward struct-member reference detected: $caller -> $callee. Reorder the functions before packaging."
-        }
-    }
+python -m py_compile (Join-Path $repoRoot "python\ar_rizomuv_bridge.py")
+if ($LASTEXITCODE -ne 0) {
+    throw "Python syntax compilation failed."
 }
 
-if (Get-ChildItem $repoRoot -Recurse -File -Filter "*.mse") {
-    throw "Encrypted MSE files are not allowed in this repository."
-}
-
-Write-Host "Topology-preserving static validation passed."
+Write-Host "Direct RizomUVLink static validation passed."
