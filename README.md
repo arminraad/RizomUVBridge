@@ -4,7 +4,7 @@ A clean, editable bridge for exchanging UV data between Autodesk 3ds Max 2027 an
 
 ## Current status
 
-Version `0.1.2-alpha` is a source-complete first implementation targeted at 3ds Max 2027/2027.1.
+Version `0.1.3-alpha` is a source-complete first implementation targeted at 3ds Max 2027/2027.1.
 
 Runtime validation still has to be performed inside an actual 3ds Max 2027 + RizomUV installation before this should be considered production-ready. The installer now executes the core script and registers the macro separately, so syntax/load failures are surfaced during installation rather than deferred to the first toolbar invocation.
 
@@ -17,7 +17,7 @@ Runtime validation still has to be performed inside an actual 3ds Max 2027 + Riz
 - The bridge never edits the main 3ds Max CUI configuration file directly.
 - All MAXScript remains readable source; no MSE encryption is used.
 - RizomUV is launched through a generated Lua file and the established `-cfi` command-line path.
-- The installed FBX plug-in defaults are used instead of forcing an obsolete FBX file version.
+- FBX export explicitly disables triangulation and Preserve Edge Orientation so Editable Poly faces are not intentionally converted to Editable Mesh triangles during handoff. The user's FBX exporter settings are pushed before export and restored afterward.
 
 ## Installation
 
