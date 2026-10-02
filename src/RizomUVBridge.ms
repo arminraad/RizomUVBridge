@@ -1,5 +1,5 @@
 /*
-RizomUVBridge 0.1.0-alpha
+RizomUVBridge 0.1.1-alpha
 Target: Autodesk 3ds Max 2027 / 2027.1
 Purpose: Non-destructive UV round-trip between 3ds Max and RizomUV.
 
@@ -8,6 +8,7 @@ This implementation was written separately for this repository.
 
 global RUVB2027
 global RUVB2027_UI
+global RUVB_ShowDialog
 
 struct RUVB2027SessionItem
 (
@@ -17,7 +18,7 @@ struct RUVB2027SessionItem
 
 struct RUVB2027Core
 (
-    version = "0.1.0-alpha",
+    version = "0.1.1-alpha",
     sessionItems = #(),
     sourceHandles = #(),
     waitingForResult = false,
@@ -170,12 +171,16 @@ struct RUVB2027Core
     (
         local found = undefined
 
-        for n in objects while found == undefined do
+        try
         (
-            if (getHandleByAnim n) == handleValue do found = n
+            found = getAnimByHandle handleValue
+        )
+        catch
+        (
+            found = undefined
         )
 
-        found
+        if found != undefined and isValidNode found then found else undefined
     ),
 
     fn restoreSourceSelection =
@@ -233,7 +238,7 @@ struct RUVB2027Core
         try(FBXExporterSetParam "GenerateLog" false)catch()
         try(FBXExporterSetParam "SmoothingGroups" true)catch()
         try(FBXExporterSetParam "SmoothMeshExport" true)catch()
-        try(FBXExporterSetParam "TangentsandBinormals" false)catch()
+        try(FBXExporterSetParam "TangentSpaceExport" false)catch()
         try(FBXExporterSetParam "Preserveinstances" false)catch()
         try(FBXExporterSetParam "Triangulate" false)catch()
         try(FBXExporterSetParam "UpAxis" "Y")catch()
@@ -386,14 +391,14 @@ struct RUVB2027Core
         true
     ),
 
-    fn parseImportedHandle nodeName =
+    fn sourceHandleForImportedName nodeName =
     (
-        if not matchPattern nodeName pattern:"RUVB_*" then return undefined
+        for item in sessionItems do
+        (
+            if item.tempName == nodeName do return item.handle
+        )
 
-        local parts = filterString nodeName "_"
-        if parts.count < 2 then return undefined
-
-        try(parts[2] as integer)catch(undefined)
+        undefined
     ),
 
     fn topologyMatches importedNode sourceNode =
@@ -487,7 +492,7 @@ struct RUVB2027Core
         (
             for importedNode in importedNodes do
             (
-                local sourceHandle = parseImportedHandle importedNode.name
+                local sourceHandle = sourceHandleForImportedName importedNode.name
 
                 if sourceHandle != undefined then
                 (
@@ -533,9 +538,12 @@ struct RUVB2027Core
         if not waitingForResult then return false
         if not doesFileExist (exchangeOutput()) then return false
 
-        local currentSize = getFileSize (exchangeOutput())
+        local currentSize = -1
+        try(currentSize = getFileSize (exchangeOutput()))catch(currentSize = -1)
 
-        if currentSize > 0 and currentSize == lastOutputSize then
+        if currentSize <= 0 then return false
+
+        if currentSize == lastOutputSize then
         (
             stableTicks += 1
         )

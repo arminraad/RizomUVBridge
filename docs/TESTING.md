@@ -15,7 +15,8 @@ The repository can statically validate and package the bridge, but a real 3ds Ma
 - Build the MZP with `build/package.ps1`.
 - Drag the MZP into 3ds Max 2027.
 - Confirm the macro registers under the `AR Tools` category.
-- Confirm the bridge opens without modifying or resetting the user's CUI configuration.
+- Confirm the installer validates the core script, registers the macro, and opens the bridge without modifying or resetting the user's CUI configuration.
+- Close the bridge and run `RizomUV Bridge 2027` once from the `AR Tools` category to verify the macro entry point independently.
 
 ### First-run configuration
 
