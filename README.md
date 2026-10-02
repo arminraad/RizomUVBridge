@@ -4,7 +4,7 @@ A topology-preserving bridge for Autodesk 3ds Max 2027 and RizomUV.
 
 ## Current status
 
-Version `0.3.0-alpha` replaces the experimental file-transport implementations with Rizom-Lab's official **RizomUVLink** API.
+Version `0.3.1-alpha` replaces the experimental file-transport implementations with Rizom-Lab's official **RizomUVLink** API.
 
 The draft is still under runtime validation and must not be considered production-ready yet.
 
@@ -60,7 +60,7 @@ If geometry topology differs, the UV transfer is blocked.
 - Autodesk 3ds Max 2027
 - RizomUV 2026.0 or newer
 - Windows
-- The `RizomUVLink` folder installed with RizomUV
+- The bridge first uses the pinned official RizomUVLink runtime bundled in the MZP; an installed RizomUVLink folder is only a fallback
 
 3ds Max 2027 ships Python 3.13.x; current RizomUVLink includes Python 3.13 support.
 
