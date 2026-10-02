@@ -24,7 +24,7 @@ $installer = Get-Content (Join-Path $repoRoot "install.ms") -Raw
 $package = Get-Content (Join-Path $repoRoot "build\package.ps1") -Raw
 
 $requiredPythonTokens = @(
-    'VERSION = "0.3.1-alpha"',
+    'VERSION = "0.3.2-alpha"',
     'import RizomUVLink',
     'CRizomUVLink()',
     '"Data.PolySizes"',
@@ -37,7 +37,12 @@ $requiredPythonTokens = @(
     'return float(point.x), float(point.z), float(-point.y)',
     'rt.ChannelInfo.CopyChannel',
     'rt.ChannelInfo.PasteChannel',
-    'Geometry topology changed in RizomUV'
+    'Geometry topology changed in RizomUV',
+    'SETTINGS_PATH = Path(__file__).resolve().parent / "RizomUVBridgeSettings.json"',
+    'def _choose_rizom_exe',
+    'def _resolve_rizom_exe',
+    'settings["rizomuv_exe"] = str(exe)',
+    'self.set_exe = QtWidgets.QPushButton("Set RizomUV EXE")'
 )
 
 foreach ($token in $requiredPythonTokens) {
