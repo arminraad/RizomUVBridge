@@ -1,0 +1,3 @@
+run "install.ms"
+drop "install.ms"
+clear temp

@@ -1,0 +1,28 @@
+name: Build MZP
+
+on:
+  push:
+    branches: ["main", "feat/**"]
+  pull_request:
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Static validation
+        shell: pwsh
+        run: ./tests/validate-package.ps1
+
+      - name: Build MZP
+        shell: pwsh
+        run: ./build/package.ps1
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: RizomUVBridge-3dsMax2027
+          path: dist/RizomUVBridge-3dsMax2027.mzp
