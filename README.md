@@ -4,7 +4,7 @@ A clean, editable bridge for exchanging UV data between Autodesk 3ds Max 2027 an
 
 ## Current status
 
-Version `0.1.1-alpha` is a source-complete first implementation targeted at 3ds Max 2027/2027.1.
+Version `0.1.2-alpha` is a source-complete first implementation targeted at 3ds Max 2027/2027.1.
 
 Runtime validation still has to be performed inside an actual 3ds Max 2027 + RizomUV installation before this should be considered production-ready. The installer now executes the core script and registers the macro separately, so syntax/load failures are surfaced during installation rather than deferred to the first toolbar invocation.
 
