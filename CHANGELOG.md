@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1-alpha - 2026-10-02
+
+- Removed the runtime dependency on RizomUV shipping a local `RizomUVLink` folder.
+- Pinned official Rizom-Lab `RizomUVLink` commit `b3be77f8777aea4c192d893d01380b4c989ccd6c`.
+- MZP build vendors the official Python 3.13 extension and its Windows DLL dependencies.
+- Installer deploys the bundled runtime beside the bridge Python module.
+- Runtime prefers the bundled official copy, with the RizomUV installation copy as fallback.
+- Added explicit Windows DLL-directory registration before importing the Python extension.
+- RizomUV executable discovery is now independent from RizomUVLink discovery.
+
+
 ## 0.3.0-alpha - 2026-10-02
 
 - Replaced FBX/OBJ geometry transport with Rizom-Lab's official RizomUVLink direct API.
