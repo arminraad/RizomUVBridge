@@ -1,9 +1,13 @@
 /*
-RizomUVBridge 0.1.3-alpha
+RizomUVBridge 0.2.0-alpha
 Target: Autodesk 3ds Max 2027 / 2027.1
-Purpose: Non-destructive UV round-trip between 3ds Max and RizomUV.
+Purpose: Topology-preserving UV round-trip between 3ds Max and RizomUV.
 
-This implementation was written separately for this repository.
+Transport:
+- No snapshot/TriMesh conversion.
+- No FBX geometry transport.
+- No 3ds Max OBJ importer/exporter.
+- The bridge writes polygonal OBJ itself and parses the returned OBJ itself.
 */
 
 global RUVB2027
@@ -12,13 +16,23 @@ global RUVB_ShowDialog
 
 struct RUVB2027SessionItem
 (
-    handle,
-    tempName
+    handle = 0,
+    tempName = "",
+    vertexCount = 0,
+    faceCount = 0,
+    faceDegrees = #(),
+    topologySignature = ""
+)
+
+struct RUVB2027ObjBlock
+(
+    name = "",
+    faces = #()
 )
 
 struct RUVB2027Core
 (
-    version = "0.1.3-alpha",
+    version = "0.2.0-alpha",
     sessionItems = #(),
     sourceHandles = #(),
     waitingForResult = false,
@@ -62,7 +76,7 @@ struct RUVB2027Core
             setINISetting (iniPath()) "Bridge" "ExchangeFolder" configured
         )
 
-        if (substring configured configured.count 1) != "\\" do configured += "\\"
+        if configured.count == 0 or (substring configured configured.count 1) != "\\" do configured += "\\"
         makeDir configured
         configured
     ),
@@ -74,12 +88,12 @@ struct RUVB2027Core
 
     fn exchangeInput =
     (
-        (exchangeBase()) + ".fbx"
+        (exchangeBase()) + ".obj"
     ),
 
     fn exchangeOutput =
     (
-        (exchangeBase()) + "_out.fbx"
+        (exchangeBase()) + "_out.obj"
     ),
 
     fn luaPath =
@@ -128,7 +142,7 @@ struct RUVB2027Core
     (
         ensureConfig()
 
-        local picked = getOpenFileName             caption:"Select RizomUV executable"             filename:"rizomuv.exe"             types:"Executable (*.exe)|*.exe|"
+        local picked = getOpenFileName caption:"Select RizomUV executable" filename:"rizomuv.exe" types:"Executable (*.exe)|*.exe|"
 
         if picked != undefined do
         (
@@ -171,14 +185,7 @@ struct RUVB2027Core
     (
         local found = undefined
 
-        try
-        (
-            found = getAnimByHandle handleValue
-        )
-        catch
-        (
-            found = undefined
-        )
+        try(found = getAnimByHandle handleValue)catch(found = undefined)
 
         if found != undefined and isValidNode found then found else undefined
     ),
@@ -196,12 +203,76 @@ struct RUVB2027Core
         if nodes.count > 0 then select nodes else max select none
     ),
 
-    fn createSnapshots =
+    fn numberText value =
+    (
+        substituteString (value as string) "," "."
+    ),
+
+    fn faceArraysFromPoly polyValue =
+    (
+        local result = #()
+        local faceCount = polyOp.getNumFaces polyValue
+
+        for faceIndex = 1 to faceCount do
+        (
+            append result (polyOp.getFaceVerts polyValue faceIndex)
+        )
+
+        result
+    ),
+
+    fn topologySignature faceArrays =
+    (
+        local seen = #()
+        local signature = ""
+
+        for faceVerts in faceArrays do
+        (
+            signature += (faceVerts.count as string) + ":"
+
+            for vertexIndex in faceVerts do
+            (
+                local mappedIndex = findItem seen vertexIndex
+
+                if mappedIndex == 0 then
+                (
+                    append seen vertexIndex
+                    mappedIndex = seen.count
+                )
+
+                signature += (mappedIndex as string) + ","
+            )
+
+            signature += ";"
+        )
+
+        signature
+    ),
+
+    fn makeExchangeClone sourceNode =
+    (
+        local tempNode = undefined
+
+        try
+        (
+            tempNode = copy sourceNode
+            convertToPoly tempNode
+        )
+        catch
+        (
+            if tempNode != undefined and isValidNode tempNode do delete tempNode
+            tempNode = undefined
+        )
+
+        if tempNode != undefined and classOf tempNode.baseObject == Editable_Poly then tempNode else undefined
+    ),
+
+    fn createExchangeClones =
     (
         sessionItems = #()
         sourceHandles = #()
 
-        local tempNodes = #()
+        local clones = #()
         local originalSelection = selection as array
 
         for sourceNode in originalSelection do
@@ -209,87 +280,148 @@ struct RUVB2027Core
             if superClassOf sourceNode == GeometryClass then
             (
                 local sourceHandle = getHandleByAnim sourceNode
-                local snap = undefined
+                local tempNode = makeExchangeClone sourceNode
 
-                with undo off
+                if tempNode != undefined then
                 (
-                    snap = snapshot sourceNode
-                    convertToPoly snap
-                    snap.name = "RUVB_" + (sourceHandle as string)
-                )
+                    tempNode.name = "RUVB_" + (sourceHandle as string)
 
-                append sourceHandles sourceHandle
-                append sessionItems (RUVB2027SessionItem handle:sourceHandle tempName:snap.name)
-                append tempNodes snap
+                    local polyValue = tempNode.baseObject
+                    local faces = faceArraysFromPoly polyValue
+                    local degrees = for f in faces collect f.count
+
+                    append sourceHandles sourceHandle
+                    append sessionItems (RUVB2027SessionItem                         handle:sourceHandle                         tempName:tempNode.name                         vertexCount:(polyOp.getNumVerts polyValue)                         faceCount:faces.count                         faceDegrees:degrees                         topologySignature:(topologySignature faces))
+
+                    append clones tempNode
+                )
             )
         )
 
-        tempNodes
+        clones
     ),
 
-    fn configureFBXExport =
+    fn deleteExchangeClones clones =
     (
-        try(pluginManager.loadClass FBXEXP)catch()
+        with undo off
+        (
+            for n in clones where isValidNode n do delete n
+        )
 
-        try(FBXExporterSetParam "Animation" false)catch()
-        try(FBXExporterSetParam "Cameras" false)catch()
-        try(FBXExporterSetParam "Lights" false)catch()
-        try(FBXExporterSetParam "EmbedTextures" false)catch()
-        try(FBXExporterSetParam "GenerateLog" false)catch()
-        try(FBXExporterSetParam "SmoothingGroups" true)catch()
-        try(FBXExporterSetParam "SmoothMeshExport" false)catch()
-        try(FBXExporterSetParam "TangentSpaceExport" false)catch()
-        try(FBXExporterSetParam "PreserveInstances" false)catch()
-        try(FBXExporterSetParam "Triangulate" false)catch()
-        try(FBXExporterSetParam "PreserveEdgeOrientation" false)catch()
-        try(FBXExporterSetParam "UpAxis" "Y")catch()
-
-        true
+        restoreSourceSelection()
     ),
 
-    fn configureFBXImport =
+    fn hasUsableMap polyValue uvChannel =
     (
-        try(pluginManager.loadClass FBXIMP)catch()
+        local ok = false
 
-        try(FBXImporterSetParam "Mode" #create)catch()
-        try(FBXImporterSetParam "Animation" false)catch()
-        try(FBXImporterSetParam "Cameras" false)catch()
-        try(FBXImporterSetParam "Lights" false)catch()
-        try(FBXImporterSetParam "GenerateLog" false)catch()
-        try(FBXImporterSetParam "SmoothingGroups" true)catch()
-        try(FBXImporterSetParam "UpAxis" "Y")catch()
-
-        true
-    ),
-
-    fn exportSnapshots tempNodes =
-    (
-        if tempNodes.count == 0 then return false
-
-        try(FBXExporterSetParam "PushSettings")catch()
-        configureFBXExport()
-
-        select tempNodes
-
-        local ok = true
         try
         (
-            exportFile (exchangeInput()) #noPrompt selectedOnly:true using:FBXEXP
+            ok = (polyOp.getMapSupport polyValue uvChannel) and ((polyOp.getNumMapVerts polyValue uvChannel) > 0)
         )
         catch
         (
             ok = false
         )
 
-        try(FBXExporterSetParam "PopSettings")catch()
+        ok
+    ),
 
-        with undo off
+    fn writeObjExchange clones mode uvChannel =
+    (
+        local stream = createFile (exchangeInput()) writeBOM:false
+        if stream == undefined then return false
+
+        format "# RizomUVBridge % - topology-preserving OBJ\n" version to:stream
+        format "# Geometry is written as original polygon faces; no triangulation.\n" to:stream
+
+        local vertexOffset = 0
+        local mapOffset = 0
+        local success = true
+
+        try
         (
-            for n in tempNodes where isValidNode n do delete n
+            for tempNode in clones do
+            (
+                local polyValue = tempNode.baseObject
+                local vertexCount = polyOp.getNumVerts polyValue
+                local faceCount = polyOp.getNumFaces polyValue
+                local exportMap = false
+                local mapCount = 0
+
+                if mode == #edit do exportMap = hasUsableMap polyValue uvChannel
+                if exportMap do mapCount = polyOp.getNumMapVerts polyValue uvChannel
+
+                format "o %\n" tempNode.name to:stream
+                format "g %\n" tempNode.name to:stream
+
+                for vertexIndex = 1 to vertexCount do
+                (
+                    local p = (polyOp.getVert polyValue vertexIndex) * tempNode.objectTransform
+                    format "v % % %\n" (numberText p.x) (numberText p.y) (numberText p.z) to:stream
+                )
+
+                if exportMap then
+                (
+                    for mapIndex = 1 to mapCount do
+                    (
+                        local uvw = polyOp.getMapVert polyValue uvChannel mapIndex
+                        format "vt % % %\n" (numberText uvw.x) (numberText uvw.y) (numberText uvw.z) to:stream
+                    )
+                )
+
+                for faceIndex = 1 to faceCount do
+                (
+                    local faceVerts = polyOp.getFaceVerts polyValue faceIndex
+                    local mapFace = undefined
+                    local writeMappedFace = false
+
+                    if exportMap then
+                    (
+                        try
+                        (
+                            mapFace = polyOp.getMapFace polyValue uvChannel faceIndex
+                            writeMappedFace = mapFace != undefined and mapFace.count == faceVerts.count
+                        )
+                        catch
+                        (
+                            writeMappedFace = false
+                        )
+                    )
+
+                    local line = "f"
+
+                    for corner = 1 to faceVerts.count do
+                    (
+                        local objVertexIndex = vertexOffset + faceVerts[corner]
+
+                        if writeMappedFace then
+                        (
+                            local objMapIndex = mapOffset + mapFace[corner]
+                            line += " " + (objVertexIndex as string) + "/" + (objMapIndex as string)
+                        )
+                        else
+                        (
+                            line += " " + (objVertexIndex as string)
+                        )
+                    )
+
+                    format "%\n" line to:stream
+                )
+
+                vertexOffset += vertexCount
+                if exportMap do mapOffset += mapCount
+            )
+        )
+        catch
+        (
+            success = false
         )
 
-        restoreSourceSelection()
-        ok and doesFileExist (exchangeInput())
+        flush stream
+        close stream
+
+        success and doesFileExist (exchangeInput())
     ),
 
     fn luaSafePath pathValue =
@@ -314,7 +446,7 @@ struct RUVB2027Core
         )
 
         format "ZomSet({Path=\"Prefs.FileSuffix\", Value=\"_out\"})\n" to:stream
-        format "-- Edit UVs in RizomUV, then Save. The bridge watches for the _out FBX.\n" to:stream
+        format "-- Do not alter geometry topology. Edit UVs only, then Save.\n" to:stream
 
         flush stream
         close stream
@@ -349,8 +481,7 @@ struct RUVB2027Core
 
         if not isMax2027OrNewer() then
         (
-            local continueAnyway = queryBox                 "This build targets 3ds Max 2027 or newer. Continue anyway?"                 title:"RizomUVBridge"
-
+            local continueAnyway = queryBox "This build targets 3ds Max 2027 or newer. Continue anyway?" title:"RizomUVBridge"
             if not continueAnyway then return false
         )
 
@@ -363,17 +494,20 @@ struct RUVB2027Core
         setConfiguredUVChannel uvChannel
         cleanupExchange()
 
-        local tempNodes = createSnapshots()
+        local clones = createExchangeClones()
 
-        if tempNodes.count == 0 then
+        if clones.count == 0 then
         (
-            messageBox "No geometry objects were found in the selection." title:"RizomUVBridge"
+            messageBox "No compatible geometry objects were found in the selection." title:"RizomUVBridge"
             return false
         )
 
-        if not exportSnapshots tempNodes then
+        local exported = writeObjExchange clones mode uvChannel
+        deleteExchangeClones clones
+
+        if not exported then
         (
-            messageBox "FBX export failed. Check that the Autodesk FBX plug-in is available." title:"RizomUVBridge"
+            messageBox "Topology-preserving OBJ export failed." title:"RizomUVBridge"
             return false
         )
 
@@ -395,143 +529,374 @@ struct RUVB2027Core
         true
     ),
 
-    fn sourceHandleForImportedName nodeName =
+    fn resolveObjIndex rawIndex currentCount =
     (
-        for item in sessionItems do
-        (
-            if item.tempName == nodeName do return item.handle
-        )
-
-        undefined
+        if rawIndex > 0 then rawIndex else (currentCount + rawIndex + 1)
     ),
 
-    fn topologyMatches importedNode sourceNode =
+    fn parseFaceToken token vertexCount mapCount =
     (
-        local probe = undefined
-        local result = false
+        local firstSlash = findString token "/"
+        local vertexText = token
+        local mapText = ""
 
-        with undo off
+        if firstSlash != undefined then
         (
-            try
-            (
-                probe = snapshot sourceNode
-                convertToPoly probe
-                convertToPoly importedNode
+            vertexText = substring token 1 (firstSlash - 1)
 
-                result =                     ((polyOp.getNumVerts probe) == (polyOp.getNumVerts importedNode)) and                     ((polyOp.getNumFaces probe) == (polyOp.getNumFaces importedNode))
+            local restLength = token.count - firstSlash
+            local rest = if restLength > 0 then substring token (firstSlash + 1) restLength else ""
+            local secondSlash = if rest.count > 0 then findString rest "/" else undefined
 
-                delete probe
-                probe = undefined
-            )
-            catch
+            if secondSlash != undefined then
+                mapText = if secondSlash > 1 then substring rest 1 (secondSlash - 1) else ""
+            else
+                mapText = rest
+        )
+
+        local vertexIndex = 0
+        local mapIndex = 0
+
+        try(vertexIndex = vertexText as integer)catch(vertexIndex = 0)
+        if mapText != "" do try(mapIndex = mapText as integer)catch(mapIndex = 0)
+
+        if vertexIndex != 0 do vertexIndex = resolveObjIndex vertexIndex vertexCount
+        if mapIndex != 0 do mapIndex = resolveObjIndex mapIndex mapCount
+
+        #(vertexIndex, mapIndex)
+    ),
+
+    fn readObjResult path =
+    (
+        local stream = openFile path
+        if stream == undefined then return undefined
+
+        local mapVerts = #()
+        local blocks = #()
+        local currentBlock = undefined
+        local vertexCount = 0
+        local usesObjectStatements = false
+
+        while not eof stream do
+        (
+            local line = readLine stream
+
+            if line != undefined and line.count > 1 then
             (
-                if probe != undefined and isValidNode probe do delete probe
-                result = false
+                if (substring line 1 2) == "v " then
+                (
+                    vertexCount += 1
+                )
+                else if line.count > 2 and (substring line 1 3) == "vt " then
+                (
+                    local parts = filterString line " \t"
+
+                    if parts.count >= 3 then
+                    (
+                        local u = 0.0
+                        local v = 0.0
+                        local w = 0.0
+
+                        try(u = parts[2] as float)catch()
+                        try(v = parts[3] as float)catch()
+                        if parts.count >= 4 do try(w = parts[4] as float)catch()
+
+                        append mapVerts [u,v,w]
+                    )
+                )
+                else if (substring line 1 2) == "o " then
+                (
+                    usesObjectStatements = true
+                    local objectName = substring line 3 (line.count - 2)
+
+                    if matchPattern objectName pattern:"RUVB_*" then
+                    (
+                        currentBlock = RUVB2027ObjBlock name:objectName faces:#()
+                        append blocks currentBlock
+                    )
+                    else
+                    (
+                        currentBlock = undefined
+                    )
+                )
+                else if (substring line 1 2) == "g " and not usesObjectStatements then
+                (
+                    local groupName = substring line 3 (line.count - 2)
+
+                    if matchPattern groupName pattern:"RUVB_*" then
+                    (
+                        currentBlock = RUVB2027ObjBlock name:groupName faces:#()
+                        append blocks currentBlock
+                    )
+                    else
+                    (
+                        currentBlock = undefined
+                    )
+                )
+                else if (substring line 1 2) == "f " and currentBlock != undefined then
+                (
+                    local tokens = filterString line " \t"
+                    local faceData = #()
+
+                    for tokenIndex = 2 to tokens.count do
+                    (
+                        append faceData (parseFaceToken tokens[tokenIndex] vertexCount mapVerts.count)
+                    )
+
+                    append currentBlock.faces faceData
+                )
             )
         )
 
-        result
+        close stream
+        #(mapVerts, blocks)
     ),
 
-    fn transferUVChannel importedNode sourceNode uvChannel =
+    fn findReturnedBlock blocks item =
     (
-        if not topologyMatches importedNode sourceNode then return #topologyMismatch
+        local found = undefined
 
-        local mapVertCount = 0
-        try(mapVertCount = polyOp.getNumMapVerts importedNode uvChannel)catch(mapVertCount = 0)
+        for block in blocks while found == undefined do
+        (
+            if block.name == item.tempName or matchPattern block.name pattern:(item.tempName + "*") do found = block
+        )
 
-        if mapVertCount <= 0 then return #missingUV
+        found
+    ),
 
-        local beforeModifierCount = sourceNode.modifiers.count
-        local pasted = true
+    fn blockVertexFaces block =
+    (
+        local faces = #()
+
+        for faceData in block.faces do
+        (
+            local verts = #()
+
+            for corner in faceData do append verts corner[1]
+            append faces verts
+        )
+
+        faces
+    ),
+
+    fn topologyMatchesSession item block =
+    (
+        if block == undefined then return false
+        if block.faces.count != item.faceCount then return false
+
+        local returnedFaces = blockVertexFaces block
+
+        for faceIndex = 1 to returnedFaces.count do
+        (
+            if returnedFaces[faceIndex].count != item.faceDegrees[faceIndex] then return false
+        )
+
+        (topologySignature returnedFaces) == item.topologySignature
+    ),
+
+    fn buildUvData block mapVerts =
+    (
+        local usedGlobalMapIndices = #()
+        local localMapVerts = #()
+        local localMapFaces = #()
+
+        for faceData in block.faces do
+        (
+            local localFace = #()
+
+            for corner in faceData do
+            (
+                local globalMapIndex = corner[2]
+                if globalMapIndex <= 0 or globalMapIndex > mapVerts.count then return undefined
+
+                local localMapIndex = findItem usedGlobalMapIndices globalMapIndex
+
+                if localMapIndex == 0 then
+                (
+                    append usedGlobalMapIndices globalMapIndex
+                    append localMapVerts mapVerts[globalMapIndex]
+                    localMapIndex = localMapVerts.count
+                )
+
+                append localFace localMapIndex
+            )
+
+            append localMapFaces localFace
+        )
+
+        #(localMapVerts, localMapFaces)
+    ),
+
+    fn makeApplyClone sourceNode =
+    (
+        local tempNode = undefined
 
         try
         (
-            channelInfo.CopyChannel importedNode 3 uvChannel
+            tempNode = copy sourceNode
+            convertToPoly tempNode
+        )
+        catch
+        (
+            if tempNode != undefined and isValidNode tempNode do delete tempNode
+            tempNode = undefined
+        )
+
+        if tempNode != undefined and classOf tempNode.baseObject == Editable_Poly then tempNode else undefined
+    ),
+
+    fn applyUvToClone tempNode item uvChannel uvData =
+    (
+        if tempNode == undefined or uvData == undefined then return false
+
+        local polyValue = tempNode.baseObject
+        local currentFaces = faceArraysFromPoly polyValue
+
+        if currentFaces.count != item.faceCount then return false
+        if (topologySignature currentFaces) != item.topologySignature then return false
+
+        local uvVerts = uvData[1]
+        local uvFaces = uvData[2]
+
+        if uvFaces.count != currentFaces.count then return false
+
+        local ok = true
+
+        try
+        (
+            polyOp.setMapSupport polyValue uvChannel true
+            polyOp.setNumMapVerts polyValue uvChannel uvVerts.count keep:false
+
+            for mapIndex = 1 to uvVerts.count do
+            (
+                polyOp.setMapVert polyValue uvChannel mapIndex uvVerts[mapIndex]
+            )
+
+            for faceIndex = 1 to uvFaces.count do
+            (
+                if uvFaces[faceIndex].count != currentFaces[faceIndex].count then
+                (
+                    ok = false
+                    exit
+                )
+
+                polyOp.setMapFace polyValue uvChannel faceIndex uvFaces[faceIndex]
+            )
+        )
+        catch
+        (
+            ok = false
+        )
+
+        ok
+    ),
+
+    fn pasteUvFromClone tempNode sourceNode uvChannel =
+    (
+        local ok = true
+
+        try
+        (
+            channelInfo.CopyChannel tempNode 3 uvChannel
             channelInfo.PasteChannel sourceNode 3 uvChannel
 
-            if sourceNode.modifiers.count > beforeModifierCount do
+            if sourceNode.modifiers.count > 0 do
             (
                 try(sourceNode.modifiers[1].name = "RizomUV UV Channel " + (uvChannel as string))catch()
             )
         )
         catch
         (
-            pasted = false
+            ok = false
         )
 
-        if pasted then #ok else #pasteFailed
+        ok
     ),
 
     fn importResult uvChannel =
     (
         if not doesFileExist (exchangeOutput()) then
         (
-            messageBox "No RizomUV output FBX was found yet. Save the model in RizomUV first." title:"RizomUVBridge"
+            messageBox "No RizomUV OBJ result was found yet. Save the model in RizomUV first." title:"RizomUVBridge"
             return false
         )
 
-        configureFBXImport()
+        local parsed = readObjResult (exchangeOutput())
 
-        local oldNodes = objects as array
-        local importedNodes = #()
+        if parsed == undefined then
+        (
+            messageBox "Could not parse the RizomUV OBJ result." title:"RizomUVBridge"
+            return false
+        )
+
+        local mapVerts = parsed[1]
+        local blocks = parsed[2]
+
         local okCount = 0
-        local mismatchCount = 0
-        local missingCount = 0
+        local topologyMismatchCount = 0
+        local missingUvCount = 0
+        local missingObjectCount = 0
         local failedCount = 0
-
-        try
-        (
-            importFile (exchangeOutput()) #noPrompt using:FBXIMP
-        )
-        catch
-        (
-            messageBox "FBX import failed." title:"RizomUVBridge"
-            return false
-        )
-
-        for n in objects where (findItem oldNodes n) == 0 do append importedNodes n
 
         undo "RizomUV UV Import" on
         (
-            for importedNode in importedNodes do
+            for item in sessionItems do
             (
-                local sourceHandle = sourceHandleForImportedName importedNode.name
+                local sourceNode = getNodeByHandle item.handle
+                local block = findReturnedBlock blocks item
 
-                if sourceHandle != undefined then
+                if sourceNode == undefined or block == undefined then
                 (
-                    local sourceNode = getNodeByHandle sourceHandle
+                    missingObjectCount += 1
+                )
+                else if not topologyMatchesSession item block then
+                (
+                    topologyMismatchCount += 1
+                )
+                else
+                (
+                    local uvData = buildUvData block mapVerts
 
-                    if sourceNode != undefined and superClassOf importedNode == GeometryClass then
+                    if uvData == undefined then
                     (
-                        local transferResult = transferUVChannel importedNode sourceNode uvChannel
+                        missingUvCount += 1
+                    )
+                    else
+                    (
+                        local tempNode = makeApplyClone sourceNode
 
-                        case transferResult of
+                        if tempNode == undefined then
                         (
-                            #ok: okCount += 1
-                            #topologyMismatch: mismatchCount += 1
-                            #missingUV: missingCount += 1
-                            default: failedCount += 1
+                            failedCount += 1
+                        )
+                        else
+                        (
+                            local applied = applyUvToClone tempNode item uvChannel uvData
+                            local pasted = false
+
+                            if applied do pasted = pasteUvFromClone tempNode sourceNode uvChannel
+
+                            with undo off
+                            (
+                                if isValidNode tempNode do delete tempNode
+                            )
+
+                            if applied and pasted then okCount += 1 else failedCount += 1
                         )
                     )
                 )
             )
         )
 
-        with undo off
-        (
-            for n in importedNodes where isValidNode n do delete n
-        )
-
         restoreSourceSelection()
         waitingForResult = false
         deleteIfPresent (exchangeOutput())
 
-        format "RizomUVBridge import: ok:% topologyMismatch:% missingUV:% failed:%\n"             okCount mismatchCount missingCount failedCount
+        format "RizomUVBridge OBJ import: ok:% topologyMismatch:% missingUV:% missingObject:% failed:%\n"             okCount topologyMismatchCount missingUvCount missingObjectCount failedCount
 
-        if mismatchCount > 0 or missingCount > 0 or failedCount > 0 then
+        if topologyMismatchCount > 0 or missingUvCount > 0 or missingObjectCount > 0 or failedCount > 0 then
         (
-            messageBox                 ("UV import completed with warnings.\n\nApplied: " + (okCount as string) +                 "\nTopology mismatch: " + (mismatchCount as string) +                 "\nMissing UV channel: " + (missingCount as string) +                 "\nFailed: " + (failedCount as string))                 title:"RizomUVBridge"
+            messageBox                 ("UV import completed with warnings.\n\nApplied: " + (okCount as string) +                 "\nTopology mismatch: " + (topologyMismatchCount as string) +                 "\nMissing UV: " + (missingUvCount as string) +                 "\nMissing object: " + (missingObjectCount as string) +                 "\nFailed: " + (failedCount as string))                 title:"RizomUVBridge"
         )
 
         okCount > 0
@@ -609,7 +974,8 @@ rollout RUVB2027_UI "RizomUV Bridge 2027"
 
     on btn_new pressed do
     (
-        lbl_status.text = "Exporting..."
+        lbl_status.text = "Writing polygon OBJ..."
+
         if RUVB2027.beginRoundTrip #new spn_channel.value then
         (
             lbl_status.text = "Waiting for RizomUV Save..."
@@ -623,7 +989,8 @@ rollout RUVB2027_UI "RizomUV Bridge 2027"
 
     on btn_edit pressed do
     (
-        lbl_status.text = "Exporting..."
+        lbl_status.text = "Writing polygon OBJ..."
+
         if RUVB2027.beginRoundTrip #edit spn_channel.value then
         (
             lbl_status.text = "Waiting for RizomUV Save..."
@@ -638,7 +1005,7 @@ rollout RUVB2027_UI "RizomUV Bridge 2027"
     on btn_import pressed do
     (
         resultTimer.active = false
-        lbl_status.text = "Importing..."
+        lbl_status.text = "Reading UV result..."
 
         if RUVB2027.importResult spn_channel.value then
             lbl_status.text = "UV import complete"
@@ -651,7 +1018,7 @@ rollout RUVB2027_UI "RizomUV Bridge 2027"
         if RUVB2027.pollOutputReady() then
         (
             resultTimer.active = false
-            lbl_status.text = "Importing..."
+            lbl_status.text = "Reading UV result..."
 
             if RUVB2027.importResult spn_channel.value then
                 lbl_status.text = "UV import complete"
