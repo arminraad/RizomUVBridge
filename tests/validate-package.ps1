@@ -31,7 +31,7 @@ $coreRequired = @(
     '(exchangeBase()) + "_out.obj"',
     'fn writeObjExchange',
     'polyOp.getFaceVerts',
-    'format "f',
+    'local line = "f"',
     'fn readObjResult',
     'fn topologyMatchesSession',
     'channelInfo.CopyChannel',
