@@ -4,24 +4,28 @@ A clean, editable bridge for exchanging UV data between Autodesk 3ds Max 2027 an
 
 ## Current status
 
-Version `0.1.3-alpha` is a source-complete first implementation targeted at 3ds Max 2027/2027.1.
+Version `0.2.0-alpha` is the first topology-preserving transport implementation.
 
-Runtime validation still has to be performed inside an actual 3ds Max 2027 + RizomUV installation before this should be considered production-ready. The installer now executes the core script and registers the macro separately, so syntax/load failures are surfaced during installation rather than deferred to the first toolbar invocation.
+Runtime validation still has to be performed inside a real 3ds Max 2027 + RizomUV installation before this should be considered production-ready.
 
-## Design
+## Critical topology rule
 
-- The selected source nodes are not collapsed or replaced.
-- Temporary snapshot nodes are exported to FBX.
-- Snapshot names contain the original 3ds Max animation handle, which is used to map imported UV data back to the source node.
-- UV data is pasted back through the 3ds Max `ChannelInfo` interface.
-- The bridge never edits the main 3ds Max CUI configuration file directly.
-- All MAXScript remains readable source; no MSE encryption is used.
-- RizomUV is launched through a generated Lua file and the established `-cfi` command-line path.
-- FBX export explicitly disables triangulation and Preserve Edge Orientation so Editable Poly faces are not intentionally converted to Editable Mesh triangles during handoff. The user's FBX exporter settings are pushed before export and restored afterward.
+The bridge must not alter model topology merely to transport UV data.
+
+The original FBX alpha was retired after runtime testing showed triangulated geometry inside RizomUV. The root cause was broader than an FBX checkbox: MAXScript `snapshot()` returns a world-state mesh, so polygon topology could already be triangulated before export.
+
+The current transport therefore:
+
+- does not use `snapshot()` or `snapshotAsMesh()`;
+- does not use FBX;
+- does not call the built-in OBJ exporter or importer;
+- clones the selected node, converts only the temporary clone to Editable Poly, and reads its polygon faces through `polyOp`;
+- writes Wavefront OBJ directly, preserving each face's original polygon degree;
+- parses the RizomUV OBJ result directly;
+- rejects the result if the face topology signature changed;
+- transfers only the UV channel back to the original node.
 
 ## Installation
-
-### Build an MZP package
 
 From PowerShell:
 
@@ -29,47 +33,35 @@ From PowerShell:
 ./build/package.ps1
 ```
 
-The package will be written to:
+The package is written to:
 
 ```text
 dist/RizomUVBridge-3dsMax2027.mzp
 ```
 
-Drag the MZP file into a 3ds Max 2027 viewport, or use **Scripting > Run Script**.
-
-The installer copies:
-
-```text
-src/RizomUVBridge.ms -> user scripts/RizomUVBridge/RizomUVBridge.ms
-macros/AR_RizomUVBridge.mcr -> user macros
-```
-
-It then registers and opens the macro.
+Drag the MZP into a 3ds Max 2027 viewport or use **Scripting > Run Script**.
 
 ## Workflow
 
 1. Select one or more geometry nodes.
 2. Choose the UV channel.
-3. Use **Send New UV** to ignore existing UVs, or **Send Edit UV** to load existing UVs.
-4. Work in RizomUV.
-5. Save from RizomUV.
-6. The bridge detects the `_out.fbx` file and imports the selected UV channel automatically.
-7. The temporary imported geometry is removed.
+3. Use **Send New UV** or **Send Edit UV**.
+4. RizomUV loads a polygonal OBJ written by the bridge.
+5. Edit UVs only; do not modify geometry.
+6. Save in RizomUV.
+7. The bridge parses the returned OBJ.
+8. If topology is unchanged, only the UV channel is pasted back.
 
-If automatic import is disabled, use **Import Result** manually.
+## Safety
 
-## Safety model
+The source node is never collapsed by the bridge.
 
-The bridge snapshots evaluated geometry for export, so the source modifier stack is not collapsed during the send step.
+A temporary copy is used for exchange and deleted immediately after the OBJ is written.
 
-On return, topology is checked before a UV channel is pasted. A topology mismatch is skipped rather than applied blindly.
-
-Because `ChannelInfo.PasteChannel` behavior must still be verified on a real 3ds Max 2027 installation, test on disposable scene copies until the runtime validation checklist is complete.
+Returned topology is checked before UV transfer. A changed face count, polygon degree, or topology signature blocks the UV paste.
 
 ## Upstream reference
 
-The workflow concept was inspired by the public `TitusLVR/RizomuvBridge` project.
-
-No license file was present in that upstream repository when this implementation was started, so this repository does not copy or assert a license over upstream source code. The 2027 implementation here was written separately.
+The workflow concept was inspired by the public `TitusLVR/RizomuvBridge` project. This implementation is maintained separately.
 
 See `NOTICE.md` and `docs/TESTING.md`.
