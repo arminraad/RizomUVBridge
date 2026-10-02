@@ -1,5 +1,5 @@
 /*
-RizomUVBridge 0.1.1-alpha
+RizomUVBridge 0.1.2-alpha
 Target: Autodesk 3ds Max 2027 / 2027.1
 Purpose: Non-destructive UV round-trip between 3ds Max and RizomUV.
 
@@ -18,7 +18,7 @@ struct RUVB2027SessionItem
 
 struct RUVB2027Core
 (
-    version = "0.1.1-alpha",
+    version = "0.1.2-alpha",
     sessionItems = #(),
     sourceHandles = #(),
     waitingForResult = false,
@@ -33,6 +33,21 @@ struct RUVB2027Core
     fn iniPath =
     (
         (bridgeDir()) + "RizomUVBridge.ini"
+    ),
+
+    fn ensureConfig =
+    (
+        makeDir (bridgeDir())
+
+        if not doesFileExist (iniPath()) then
+        (
+            setINISetting (iniPath()) "Bridge" "RizomUVExe" ""
+            setINISetting (iniPath()) "Bridge" "ExchangeFolder" ((sysInfo.tempDir) + "RizomUVBridge\\")
+            setINISetting (iniPath()) "Bridge" "UVChannel" "1"
+            setINISetting (iniPath()) "Bridge" "AutoImport" "1"
+        )
+
+        true
     ),
 
     fn exchangeDir =
@@ -70,21 +85,6 @@ struct RUVB2027Core
     fn luaPath =
     (
         (exchangeDir()) + "RUVB_launch.lua"
-    ),
-
-    fn ensureConfig =
-    (
-        makeDir (bridgeDir())
-
-        if not doesFileExist (iniPath()) then
-        (
-            setINISetting (iniPath()) "Bridge" "RizomUVExe" ""
-            setINISetting (iniPath()) "Bridge" "ExchangeFolder" ((sysInfo.tempDir) + "RizomUVBridge\\")
-            setINISetting (iniPath()) "Bridge" "UVChannel" "1"
-            setINISetting (iniPath()) "Bridge" "AutoImport" "1"
-        )
-
-        true
     ),
 
     fn isMax2027OrNewer =
