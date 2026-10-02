@@ -1,44 +1,29 @@
 # Changelog
 
+## 0.2.0-alpha - 2026-10-02
+
+- Replaced the FBX transport with a custom topology-preserving OBJ transport.
+- Removed `snapshot()`; Autodesk documents it as producing a world-state mesh, which can triangulate polygon topology before export.
+- Removed dependency on 3ds Max FBX and OBJ importer/exporter plug-ins for geometry transport.
+- Added direct polygon OBJ writer using Editable Poly face arrays.
+- Added direct OBJ result parser.
+- Added topology-signature validation before any UV data is applied.
+- Added direct UV reconstruction on a temporary Editable Poly clone.
+- Kept `ChannelInfo` only for the final UV-channel paste back to the untouched source node.
+- Added static checks that forbid snapshot, FBX, built-in OBJ import/export, and generic import/export calls from the core.
+
 ## 0.1.3-alpha - 2026-10-02
 
-- Fixed FBX handoff settings that could triangulate Editable Poly topology.
-- Explicitly disabled `Triangulate`.
-- Explicitly disabled `PreserveEdgeOrientation`, which Autodesk documents as capable of converting Editable Poly objects to triangulated Editable Mesh when hidden edge turns are present.
-- Disabled `SmoothMeshExport` for topology-preserving UV exchange.
-- Added FBX exporter settings push/pop so user FBX settings are restored after bridge export.
-- Expanded static validation for topology-preservation export settings.
-
+- Attempted FBX topology-preservation settings. Runtime validation showed triangulation still occurred.
 
 ## 0.1.2-alpha - 2026-10-02
 
-- Fixed the remaining struct-member forward reference: `exchangeDir -> ensureConfig`.
-- Reordered configuration initialization before all exchange-path functions.
-- Added a generalized static check that rejects any future call from a struct member to a member declared later in the same structure.
-- Audited the full current `RUVB2027Core` call graph; no other forward member references remain.
-
+- Fixed struct-member dependency order and added forward-reference validation.
 
 ## 0.1.1-alpha - 2026-10-02
 
-- Fixed MAXScript rollout label declaration for 3ds Max 2027.
-- Fixed MacroScript scope shadowing of the global dialog entry point.
-- Switched installer and macro loading to `executeScriptFile` with captured error messages.
-- Added explicit global declarations for the dialog entry point.
-- Switched source-node lookup to `GetAnimByHandle`.
-- Replaced obsolete/incorrect FBX tangent parameter with `TangentSpaceExport`.
-- Removed integer reparsing of animation handles during result mapping.
-- Hardened result-file polling against transient file-size read failures.
-- Expanded static compatibility validation to cover the discovered 2027 failure classes.
+- Fixed rollout label declaration and MacroScript scope loading.
 
 ## 0.1.0-alpha - 2026-10-02
 
-- Added clean 3ds Max 2027 bridge implementation.
-- Added non-destructive snapshot export path.
-- Added source-node mapping using 3ds Max animation handles.
-- Added topology validation before UV transfer.
-- Added configurable UV channel.
-- Added New UV and Edit UV modes.
-- Added automatic detection of the RizomUV `_out.fbx` result.
-- Added source-readable MZP installer.
-- Added PowerShell package builder and static validation.
-- Added runtime validation checklist.
+- Initial 3ds Max 2027 bridge alpha.
