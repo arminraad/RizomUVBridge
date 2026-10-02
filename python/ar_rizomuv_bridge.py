@@ -28,7 +28,7 @@ from pymxs import runtime as rt
 from qtmax import GetQMaxMainWindow
 
 
-VERSION = "0.3.0-alpha"
+VERSION = "0.3.1-alpha"
 MODULE_NAME = "ar_rizomuv_bridge"
 
 
@@ -53,6 +53,8 @@ class BridgeSession:
 
 
 _link = None
+_link_source = None
+_dll_dir_handles = []
 _session: Optional[BridgeSession] = None
 _dialog = None
 
@@ -81,35 +83,61 @@ def _find_rizom_install_dir() -> Path:
             try:
                 with winreg.OpenKey(root, name) as key:
                     exe_path = winreg.QueryValue(key, "rizomuv.exe")
-                install_dir = Path(exe_path).parent
-                if (install_dir / "RizomUVLink" / "RizomUVLink.py").is_file():
-                    return install_dir
+                exe = Path(exe_path)
+                if exe.is_file():
+                    return exe.parent
             except (FileNotFoundError, OSError):
                 continue
 
-    raise RuntimeError(
-        "RizomUV was found, but its RizomUVLink module was not found. "
-        "RizomUV 2026.0 or newer is required for this bridge."
-    )
+    raise RuntimeError("RizomUV executable was not found in registered installations.")
+
+
+def _candidate_link_dirs():
+    bundled = Path(__file__).resolve().parent / "RizomUVBridgeVendor" / "RizomUVLink"
+    installed = _find_rizom_install_dir() / "RizomUVLink"
+    return [bundled, installed]
 
 
 def _import_rizomuv_link():
-    install_dir = _find_rizom_install_dir()
-    link_dir = install_dir / "RizomUVLink"
-    link_dir_str = str(link_dir)
+    global _link_source, _dll_dir_handles
 
-    if link_dir_str not in sys.path:
-        sys.path.insert(0, link_dir_str)
+    errors = []
 
-    try:
-        import RizomUVLink
-    except Exception as exc:
-        raise RuntimeError(
-            f"Could not import RizomUVLink from {link_dir}. "
-            f"3ds Max Python is {sys.version.split()[0]}. Error: {exc}"
-        ) from exc
+    for link_dir in _candidate_link_dirs():
+        if not (link_dir / "RizomUVLink.py").is_file():
+            errors.append(f"{link_dir}: RizomUVLink.py not found")
+            continue
 
-    return RizomUVLink
+        link_dir_str = str(link_dir)
+        win_dir = link_dir / "win"
+
+        try:
+            if sys.version_info[:2] != (3, 13):
+                raise RuntimeError(
+                    f"This 3ds Max 2027 package vendors the Python 3.13 RizomUVLink build, "
+                    f"but Max is running Python {sys.version.split()[0]}."
+                )
+
+            if os.name == "nt" and win_dir.is_dir() and hasattr(os, "add_dll_directory"):
+                _dll_dir_handles.append(os.add_dll_directory(str(win_dir)))
+
+            if link_dir_str not in sys.path:
+                sys.path.insert(0, link_dir_str)
+
+            for module_name in ("RizomUVLink", "RizomUVLinkBase", "win"):
+                sys.modules.pop(module_name, None)
+
+            import RizomUVLink
+
+            _link_source = link_dir
+            return RizomUVLink
+        except Exception as exc:
+            errors.append(f"{link_dir}: {exc}")
+
+    raise RuntimeError(
+        "RizomUVLink could not be loaded. Checked bundled and installed copies:\n"
+        + "\n".join(errors)
+    )
 
 
 def _ensure_link():
@@ -122,7 +150,8 @@ def _ensure_link():
     link = module.CRizomUVLink()
 
     try:
-        port = link.RunRizomUV()
+        rizom_exe = str(_find_rizom_install_dir() / "rizomuv.exe")
+        port = link.RunRizomUV(exePath=rizom_exe)
     except Exception as exc:
         raise RuntimeError(f"RizomUVLink could not launch/connect to RizomUV: {exc}") from exc
 
@@ -500,10 +529,13 @@ def get_uvs_from_rizom():
 
 
 def connection_info():
-    link_dir = _find_rizom_install_dir() / "RizomUVLink"
+    module = _import_rizomuv_link()
+    link_dir = _link_source
     return (
         f"3ds Max Python: {sys.version.split()[0]}\n"
-        f"RizomUVLink: {link_dir}\n"
+        f"RizomUV executable: {_find_rizom_install_dir() / 'rizomuv.exe'}\n"
+        f"RizomUVLink source: {link_dir}\n"
+        f"RizomUVLink module: {getattr(module, '__file__', 'unknown')}\n"
         "Transport: direct memory/API (no FBX/OBJ)"
     )
 
