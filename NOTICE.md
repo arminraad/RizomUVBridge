@@ -8,6 +8,6 @@ The historical workflow was informed by the public `TitusLVR/RizomuvBridge` proj
 
 Version 0.3.0-alpha uses the public integration API provided by **RizomUVLink**, authored by Rizom-Lab / Remi Arquier and released under the MIT License.
 
-This repository does not bundle RizomUVLink binaries. At runtime it loads the `RizomUVLink` folder installed with the user's RizomUV installation.
+The distributed MZP bundles the unmodified Windows Python 3.13 runtime files from official Rizom-Lab RizomUVLink commit `b3be77f8777aea4c192d893d01380b4c989ccd6c`, together with its MIT license. The files are fetched from the official repository at package-build time and installed beside the bridge module.
 
 RizomUV is a product of Rizom-Lab. 3ds Max is an Autodesk product. Product names are used only to describe interoperability.
