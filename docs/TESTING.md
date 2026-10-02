@@ -1,13 +1,15 @@
 # Runtime validation checklist
 
-Version under test: `0.3.0-alpha`
+Version under test: `0.3.2-alpha`
 
 The direct-link architecture has one non-negotiable rule: only UV data may return to the source object.
 
 ## Phase 1 — installation and runtime compatibility
 
 - Install the MZP in 3ds Max 2027.
-- Confirm the bridge window reports `0.3.0-alpha — Direct RizomUVLink`.
+- Confirm the bridge window reports `0.3.2-alpha — Direct RizomUVLink`.
+- Click **Set RizomUV EXE** and select the installed `rizomuv.exe`.
+- Close and reopen the bridge; confirm the path is retained.
 - Click **Connection Info**.
 - Confirm Max Python is 3.13.x.
 - Confirm an installed RizomUVLink path is reported.
