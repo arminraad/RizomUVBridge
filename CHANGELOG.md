@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2-alpha - 2026-10-02
+
+- Fixed the remaining struct-member forward reference: `exchangeDir -> ensureConfig`.
+- Reordered configuration initialization before all exchange-path functions.
+- Added a generalized static check that rejects any future call from a struct member to a member declared later in the same structure.
+- Audited the full current `RUVB2027Core` call graph; no other forward member references remain.
+
+
 ## 0.1.1-alpha - 2026-10-02
 
 - Fixed MAXScript rollout label declaration for 3ds Max 2027.
