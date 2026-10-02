@@ -1,17 +1,15 @@
 /*
 RizomUVBridge installer for 3ds Max 2027.
-Keeps the installation source-readable and does not modify the CUI file directly.
+Installs a Python/PySide6 bridge backed by Rizom-Lab's installed RizomUVLink.
 */
 
 fn RUVB_Install =
 (
-    global RUVB_ShowDialog
-
     local packageRoot = getFilenamePath (getSourceFileName())
-    local targetDir = (getDir #userScripts) + "\\RizomUVBridge\\"
-    local targetScript = targetDir + "RizomUVBridge.ms"
+    local targetPythonDir = (getDir #userScripts) + "\\Python\\"
+    local targetModule = targetPythonDir + "ar_rizomuv_bridge.py"
     local targetMacro = (getDir #userMacros) + "\\AR_RizomUVBridge.mcr"
-    local coreError = undefined
+    local legacyCore = (getDir #userScripts) + "\\RizomUVBridge\\RizomUVBridge.ms"
     local macroError = undefined
 
     fn copyReplacing sourcePath targetPath =
@@ -20,14 +18,14 @@ fn RUVB_Install =
         copyFile sourcePath targetPath
     )
 
-    makeDir targetDir
+    makeDir targetPythonDir
 
-    local sourceScript = packageRoot + "src\\RizomUVBridge.ms"
+    local sourceModule = packageRoot + "python\\ar_rizomuv_bridge.py"
     local sourceMacro = packageRoot + "macros\\AR_RizomUVBridge.mcr"
 
-    if not doesFileExist sourceScript then
+    if not doesFileExist sourceModule then
     (
-        messageBox ("Installer cannot find: " + sourceScript) title:"RizomUVBridge"
+        messageBox ("Installer cannot find: " + sourceModule) title:"RizomUVBridge"
         return false
     )
 
@@ -37,9 +35,9 @@ fn RUVB_Install =
         return false
     )
 
-    if not copyReplacing sourceScript targetScript then
+    if not copyReplacing sourceModule targetModule then
     (
-        messageBox ("Could not install: " + targetScript) title:"RizomUVBridge"
+        messageBox ("Could not install: " + targetModule) title:"RizomUVBridge"
         return false
     )
 
@@ -49,17 +47,8 @@ fn RUVB_Install =
         return false
     )
 
-    if not executeScriptFile targetScript errormessage:&coreError then
-    (
-        messageBox ("Core script validation failed.\n\n" + (coreError as string)) title:"RizomUVBridge"
-        return false
-    )
-
-    if RUVB_ShowDialog == undefined then
-    (
-        messageBox "Core script loaded but did not expose RUVB_ShowDialog." title:"RizomUVBridge"
-        return false
-    )
+    -- Remove the retired MAXScript geometry-transport core from alpha 0.1/0.2.
+    if doesFileExist legacyCore do deleteFile legacyCore
 
     if not executeScriptFile targetMacro errormessage:&macroError then
     (
@@ -67,8 +56,24 @@ fn RUVB_Install =
         return false
     )
 
-    format "RizomUVBridge installed to: %\n" targetDir
-    RUVB_ShowDialog()
+    local initResult = python.Init throwOnError:false
+    if initResult != #success then
+    (
+        messageBox ("Python initialization failed.\n\n" + python.GetLastError()) title:"RizomUVBridge"
+        return false
+    )
+
+    local pyDir = substituteString targetPythonDir "\\" "/"
+    local pyCmd = "import sys, importlib; p=r'" + pyDir + "'; sys.path.insert(0,p) if p not in sys.path else None; importlib.invalidate_caches(); old=sys.modules.get('ar_rizomuv_bridge'); old.shutdown() if old is not None and hasattr(old,'shutdown') else None; import ar_rizomuv_bridge; importlib.reload(ar_rizomuv_bridge); ar_rizomuv_bridge.show()"
+    local pyResult = python.Execute pyCmd throwOnError:false
+
+    if pyResult != #success then
+    (
+        messageBox ("RizomUVBridge Python validation failed.\n\n" + python.GetLastError()) title:"RizomUVBridge"
+        return false
+    )
+
+    format "RizomUVBridge Python module installed to: %\n" targetModule
     true
 )
 
