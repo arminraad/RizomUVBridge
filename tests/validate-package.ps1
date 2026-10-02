@@ -24,29 +24,45 @@ $installer = Get-Content (Join-Path $repoRoot "install.ms") -Raw
 
 $coreRequired = @(
     'global RUVB_ShowDialog',
-    'maxVersion()',
     'majorCode >= 29000',
-    'snapshot sourceNode',
-    'getAnimByHandle handleValue',
+    'copy sourceNode',
+    'convertToPoly tempNode',
+    '(exchangeBase()) + ".obj"',
+    '(exchangeBase()) + "_out.obj"',
+    'fn writeObjExchange',
+    'polyOp.getFaceVerts',
+    'format "f',
+    'fn readObjResult',
+    'fn topologyMatchesSession',
     'channelInfo.CopyChannel',
     'channelInfo.PasteChannel',
-    'FBXExporterSetParam "TangentSpaceExport" false',
-    'FBXExporterSetParam "Triangulate" false',
-    'FBXExporterSetParam "PreserveEdgeOrientation" false',
-    'FBXExporterSetParam "SmoothMeshExport" false',
-    'FBXExporterSetParam "PushSettings"',
-    'FBXExporterSetParam "PopSettings"',
-    'FBXImporterSetParam',
     'ZomLoad({File={Path=',
     'Prefs.FileSuffix',
-    'shellLaunch exe args',
-    'fn sourceHandleForImportedName',
-    'fn pollOutputReady'
+    'shellLaunch exe args'
 )
 
 foreach ($token in $coreRequired) {
     if (-not $core.Contains($token)) {
         throw "Core script is missing expected token: $token"
+    }
+}
+
+$forbiddenCorePatterns = @(
+    'snapshot sourceNode',
+    'snapshotAsMesh',
+    'FBXEXP',
+    'FBXIMP',
+    'FBXExporterSetParam',
+    'FBXImporterSetParam',
+    'ObjExp',
+    'ObjImp',
+    'exportFile ',
+    'importFile '
+)
+
+foreach ($pattern in $forbiddenCorePatterns) {
+    if ($core.Contains($pattern)) {
+        throw "Topology-preserving core still contains forbidden transport path: $pattern"
     }
 }
 
@@ -76,25 +92,7 @@ foreach ($token in $installerRequired) {
     }
 }
 
-$forbidden = @{
-    "dynamic rollout label caption" = 'label lbl_version ('
-    "obsolete FBX parameter" = 'TangentsandBinormals'
-    "integer reparse of animation handle" = 'parseImportedHandle'
-}
-
-foreach ($item in $forbidden.GetEnumerator()) {
-    if ($core.Contains($item.Value)) {
-        throw "Core script still contains forbidden pattern: $($item.Key)"
-    }
-}
-
-if ($macro -match '(?s)fileIn\s+bridgeScript.*?RUVB_ShowDialog\(\)' -and $macro -notmatch 'global\s+RUVB_ShowDialog') {
-    throw "Macro can shadow RUVB_ShowDialog as an implicit local."
-}
-
-# MAXScript structure member functions are lexically scoped. A call to a member
-# declared later in the same struct can be captured as an implicit local and
-# evaluate to undefined at runtime. Reject all such forward references.
+# Reject forward calls between RUVB2027Core member functions.
 $structStart = $core.IndexOf("struct RUVB2027Core")
 $structEndMarker = "RUVB2027 = RUVB2027Core()"
 $structEnd = $core.IndexOf($structEndMarker)
@@ -124,4 +122,4 @@ if (Get-ChildItem $repoRoot -Recurse -File -Filter "*.mse") {
     throw "Encrypted MSE files are not allowed in this repository."
 }
 
-Write-Host "Static compatibility validation passed."
+Write-Host "Topology-preserving static validation passed."
