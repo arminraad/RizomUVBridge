@@ -24,7 +24,7 @@ $installer = Get-Content (Join-Path $repoRoot "install.ms") -Raw
 $package = Get-Content (Join-Path $repoRoot "build\package.ps1") -Raw
 
 $requiredPythonTokens = @(
-    'VERSION = "0.3.0-alpha"',
+    'VERSION = "0.3.1-alpha"',
     'import RizomUVLink',
     'CRizomUVLink()',
     '"Data.PolySizes"',
@@ -73,6 +73,34 @@ if (-not $installer.Contains('legacyCore')) {
 
 if ($package.Contains('src\RizomUVBridge.ms')) {
     throw "Package still includes the retired MAXScript geometry core."
+}
+
+$packageRequired = @(
+    'b3be77f8777aea4c192d893d01380b4c989ccd6c',
+    'RizomUVLink.py',
+    'RizomUVLinkBase.py',
+    'rizomuvlink_python313.pyd',
+    'libsodium.dll',
+    'libzmq-v142-mt-4_3_4.dll'
+)
+
+foreach ($token in $packageRequired) {
+    if (-not $package.Contains($token)) {
+        throw "Package script does not vendor required RizomUVLink token: $token"
+    }
+}
+
+$installerRequiredVendor = @(
+    'RizomUVBridgeVendor',
+    'rizomuvlink_python313.pyd',
+    'libsodium.dll',
+    'libzmq-v142-mt-4_3_4.dll'
+)
+
+foreach ($token in $installerRequiredVendor) {
+    if (-not $installer.Contains($token)) {
+        throw "Installer does not install required bundled RizomUVLink token: $token"
+    }
 }
 
 python -m py_compile (Join-Path $repoRoot "python\ar_rizomuv_bridge.py")
