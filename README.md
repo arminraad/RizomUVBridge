@@ -1,67 +1,94 @@
 # RizomUVBridge
 
-A clean, editable bridge for exchanging UV data between Autodesk 3ds Max 2027 and RizomUV.
+A topology-preserving bridge for Autodesk 3ds Max 2027 and RizomUV.
 
 ## Current status
 
-Version `0.2.0-alpha` is the first topology-preserving transport implementation.
+Version `0.3.0-alpha` replaces the experimental file-transport implementations with Rizom-Lab's official **RizomUVLink** API.
 
-Runtime validation still has to be performed inside a real 3ds Max 2027 + RizomUV installation before this should be considered production-ready.
+The draft is still under runtime validation and must not be considered production-ready yet.
 
-## Critical topology rule
+## Why the architecture changed
 
-The bridge must not alter model topology merely to transport UV data.
+Runtime tests of the early FBX and OBJ alphas exposed exactly the class of problems a UV bridge should avoid:
 
-The original FBX alpha was retired after runtime testing showed triangulated geometry inside RizomUV. The root cause was broader than an FBX checkbox: MAXScript `snapshot()` returns a world-state mesh, so polygon topology could already be triangulated before export.
+- triangulation and hidden tessellation differences;
+- axis conversion / 90-degree orientation problems;
+- importer/exporter-specific mesh interpretation;
+- risk that a returned mesh no longer matches 3ds Max's polygon representation.
 
-The current transport therefore:
+Research of the current RizomUV ecosystem showed that Rizom-Lab now provides **RizomUVLink**, an MIT-licensed DCC integration library with a fileless mesh-transfer API.
 
-- does not use `snapshot()` or `snapshotAsMesh()`;
-- does not use FBX;
-- does not call the built-in OBJ exporter or importer;
-- clones the selected node, converts only the temporary clone to Editable Poly, and reads its polygon faces through `polyOp`;
-- writes Wavefront OBJ directly, preserving each face's original polygon degree;
-- parses the RizomUV OBJ result directly;
-- rejects the result if the face topology signature changed;
-- transfers only the UV channel back to the original node.
+Its official fileless example transfers these arrays directly:
+
+- polygon sizes;
+- polygon-to-XYZ vertex IDs;
+- XYZ coordinates;
+- polygon-to-UVW vertex IDs;
+- UVW coordinates.
+
+That is now the bridge architecture.
+
+## Transport invariants
+
+The bridge does **not** use FBX or OBJ for geometry transport.
+
+It does **not** call `snapshot()`.
+
+It does **not** replace or collapse the user's source object.
+
+For each Send:
+
+1. A temporary evaluated copy of the selected object is created.
+2. Polygon arrays are read through `polyOp`.
+3. Max Z-up coordinates are converted to RizomUV Y-up coordinates.
+4. The arrays are sent directly through `RizomUVLink.Load()`.
+5. The temporary copy is deleted.
+
+For Get:
+
+1. UV arrays are read directly through `RizomUVLink.Save({"Data": True})`.
+2. Polygon sizes and polygon XYZ IDs are checked against the Send session.
+3. The current source topology is checked again.
+4. UV data is staged on a temporary copy.
+5. Only the requested map channel is pasted to the source through ChannelInfo.
+
+If geometry topology differs, the UV transfer is blocked.
+
+## Requirements
+
+- Autodesk 3ds Max 2027
+- RizomUV 2026.0 or newer
+- Windows
+- The `RizomUVLink` folder installed with RizomUV
+
+3ds Max 2027 ships Python 3.13.x; current RizomUVLink includes Python 3.13 support.
 
 ## Installation
 
-From PowerShell:
-
-```powershell
-./build/package.ps1
-```
-
-The package is written to:
+Build/download:
 
 ```text
-dist/RizomUVBridge-3dsMax2027.mzp
+RizomUVBridge-3dsMax2027.mzp
 ```
 
-Drag the MZP into a 3ds Max 2027 viewport or use **Scripting > Run Script**.
+Drag the MZP into the 3ds Max viewport.
 
-## Workflow
+The installer places the Python module in the user Python scripts directory and registers the `AR Tools > RizomUV Bridge 2027` macro.
 
-1. Select one or more geometry nodes.
-2. Choose the UV channel.
-3. Use **Send New UV** or **Send Edit UV**.
-4. RizomUV loads a polygonal OBJ written by the bridge.
-5. Edit UVs only; do not modify geometry.
-6. Save in RizomUV.
-7. The bridge parses the returned OBJ.
-8. If topology is unchanged, only the UV channel is pasted back.
+## Usage
 
-## Safety
+- **Send New UV** — send current evaluated polygon topology with a fresh UVW seed.
+- **Send Edit UV** — send current evaluated polygon topology plus the selected existing UV channel.
+- Work in RizomUV.
+- **Get UVs** — retrieve UV arrays directly from the live RizomUV session and apply only that UV channel.
 
-The source node is never collapsed by the bridge.
+No manual Save in RizomUV is required for the direct-link Get operation.
 
-A temporary copy is used for exchange and deleted immediately after the OBJ is written.
+## Upstream references
 
-Returned topology is checked before UV transfer. A changed face count, polygon degree, or topology signature blocks the UV paste.
+The historical workflow was inspired by `TitusLVR/RizomuvBridge`.
 
-## Upstream reference
-
-The workflow concept was inspired by the public `TitusLVR/RizomuvBridge` project. This implementation is maintained separately.
+The current transport is based on the public API design demonstrated by Rizom-Lab's MIT-licensed `RizomUVLink` project. The library itself is not bundled here; the bridge loads the copy installed with RizomUV.
 
 See `NOTICE.md` and `docs/TESTING.md`.
