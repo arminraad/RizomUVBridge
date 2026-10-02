@@ -22,8 +22,8 @@ $core = Get-Content (Join-Path $repoRoot "src\RizomUVBridge.ms") -Raw
 $requiredTokens = @(
     "maxVersion()",
     "snapshot sourceNode",
-    "ChannelInfo.CopyChannel",
-    "ChannelInfo.PasteChannel",
+    "channelInfo.CopyChannel",
+    "channelInfo.PasteChannel",
     "FBXExporterSetParam",
     "FBXImporterSetParam",
     'ZomLoad({File={Path=',
