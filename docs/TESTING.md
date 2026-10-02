@@ -1,59 +1,63 @@
 # Runtime validation checklist
 
-The current transport is designed around a strict rule: UV exchange must not change polygon topology.
+Version under test: `0.3.0-alpha`
 
-## Primary target
+The direct-link architecture has one non-negotiable rule: only UV data may return to the source object.
 
-- Autodesk 3ds Max 2027
-- Current installed RizomUV build
+## Phase 1 — installation and runtime compatibility
 
-## Installation
+- Install the MZP in 3ds Max 2027.
+- Confirm the bridge window reports `0.3.0-alpha — Direct RizomUVLink`.
+- Click **Connection Info**.
+- Confirm Max Python is 3.13.x.
+- Confirm an installed RizomUVLink path is reported.
+- Confirm there is no MAXScript or Python traceback.
 
-- Build/download the MZP.
-- Install it in 3ds Max 2027.
-- Confirm the window reports `0.2.0-alpha`.
-- Confirm no MAXScript load error occurs.
+## Phase 2 — direct topology transfer
 
-## Topology test — required before UV tests
+Use a disposable Editable Poly containing obvious quads and one controlled n-gon.
 
-Use a disposable Editable Poly containing obvious quads and n-gons.
+- Select only that object.
+- Click **Send New UV**.
+- Confirm RizomUV opens through the direct link.
+- Confirm the object is upright, not rotated 90 degrees.
+- Do not unwrap yet.
+- Compare the visible object silhouette and polygon structure with Max.
 
-- Record the visible polygon layout in 3ds Max.
-- Run **Send New UV**.
-- In RizomUV, inspect the model before doing any UV operation.
-- Confirm the same quads/n-gons are present.
-- Confirm no diagonal triangulation edges were introduced.
+Important: a DCC/GPU may visually tessellate an n-gon internally for drawing. The acceptance criterion is not merely the absence of every diagonal line in the Rizom viewport; the bridge's returned `PolySizes` and `PolyXYZIDs` must remain identical. The Get guard enforces this.
 
-If this test fails, stop. Do not proceed to UV return tests.
+## Phase 3 — new UV return
 
-## New UV round-trip
+- Create a simple unwrap in RizomUV.
+- Click **Get UVs** in Max.
+- Confirm UV channel 1 appears on the original object.
+- Confirm source geometry, transform, material and modifier stack are unchanged.
 
-- Create UVs in RizomUV.
-- Save.
-- Confirm the bridge imports only UV data.
-- Confirm the original object name, transform, material, geometry, and modifier stack are unchanged.
+## Phase 4 — edit existing UV
 
-## Edit UV round-trip
+- Start with a recognizable UV channel.
+- Click **Send Edit UV**.
+- Move one UV island in RizomUV.
+- Click **Get UVs**.
+- Confirm only the UV change returns.
 
-- Start from an existing UV channel.
-- Run **Send Edit UV**.
-- Move a recognizable UV island.
-- Save.
-- Confirm the same UV change returns to the same source node.
+## Phase 5 — topology rejection
 
-## Topology guard
+- Send the object.
+- Change source topology in Max before Get.
+- Click **Get UVs**.
+- Confirm the bridge refuses to apply UVs.
 
-- Start an exchange.
-- Modify geometry topology before saving from RizomUV.
-- Save.
-- Confirm the bridge refuses to apply UVs and reports a topology mismatch.
+If RizomUV geometry topology itself is modified, Get must also refuse the result.
 
-## Multiple objects
+## Phase 6 — multiple objects
 
-- Send at least three polygon objects together.
-- Confirm their object identities stay separate in RizomUV.
-- Confirm each UV result maps back to the correct source node.
+After all single-object tests pass:
+
+- Send three separate polygon objects.
+- Confirm their combined direct payload is stable.
+- Confirm the returned UV corner ranges map back to the correct source objects.
 
 ## Acceptance threshold
 
-Do not merge the draft PR until the topology test and UV round-trip tests pass on the user's real 3ds Max 2027 + RizomUV installation.
+Do not merge PR #1 until Phases 1–5 pass on the user's actual 3ds Max 2027 + RizomUV installation.
