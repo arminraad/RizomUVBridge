@@ -1,81 +1,59 @@
 # Runtime validation checklist
 
-The repository can statically validate and package the bridge, but a real 3ds Max + RizomUV session is required to prove the round-trip.
+The current transport is designed around a strict rule: UV exchange must not change polygon topology.
 
 ## Primary target
 
 - Autodesk 3ds Max 2027
-- Autodesk 3ds Max 2027.1
 - Current installed RizomUV build
 
-## Required tests
+## Installation
 
-### Installation
+- Build/download the MZP.
+- Install it in 3ds Max 2027.
+- Confirm the window reports `0.2.0-alpha`.
+- Confirm no MAXScript load error occurs.
 
-- Build the MZP with `build/package.ps1`.
-- Drag the MZP into 3ds Max 2027.
-- Confirm the macro registers under the `AR Tools` category.
-- Confirm the installer validates the core script, registers the macro, and opens the bridge without modifying or resetting the user's CUI configuration.
-- Close the bridge and run `RizomUV Bridge 2027` once from the `AR Tools` category to verify the macro entry point independently.
+## Topology test — required before UV tests
 
-### First-run configuration
+Use a disposable Editable Poly containing obvious quads and n-gons.
 
-- Click **Set RizomUV EXE**.
-- Select the installed `rizomuv.exe`.
-- Close and reopen 3ds Max.
-- Confirm the executable path persists.
+- Record the visible polygon layout in 3ds Max.
+- Run **Send New UV**.
+- In RizomUV, inspect the model before doing any UV operation.
+- Confirm the same quads/n-gons are present.
+- Confirm no diagonal triangulation edges were introduced.
 
-### Single object / New UV
+If this test fails, stop. Do not proceed to UV return tests.
 
-- Use a disposable Editable Poly with known topology.
-- Add a visible modifier above the base object.
-- Record the modifier stack.
-- Send with **New UV**.
-- Create UVs in RizomUV and save.
-- Confirm UV channel 1 returns.
-- Confirm object transform, name, materials and modifier stack remain unchanged.
+## New UV round-trip
 
-### Single object / Edit UV
+- Create UVs in RizomUV.
+- Save.
+- Confirm the bridge imports only UV data.
+- Confirm the original object name, transform, material, geometry, and modifier stack are unchanged.
 
-- Start with an existing UV channel.
-- Send with **Edit UV**.
-- Move a recognizable island.
-- Save and confirm the changed UV returns to the same source node.
+## Edit UV round-trip
 
-### Multiple objects
+- Start from an existing UV channel.
+- Run **Send Edit UV**.
+- Move a recognizable UV island.
+- Save.
+- Confirm the same UV change returns to the same source node.
 
-- Select at least three differently named geometry objects.
-- Round-trip all objects together.
-- Confirm each imported UV channel maps back to the correct original object.
+## Topology guard
 
-### Topology guard
+- Start an exchange.
+- Modify geometry topology before saving from RizomUV.
+- Save.
+- Confirm the bridge refuses to apply UVs and reports a topology mismatch.
 
-- Start a round-trip.
-- Change source topology in 3ds Max before saving from RizomUV.
-- Confirm the bridge refuses to paste UVs to the changed object and reports a topology mismatch.
+## Multiple objects
 
-### UV channels
-
-- Test channel 1.
-- Test a non-default channel such as channel 2.
-- Confirm only the selected channel is updated.
-
-### Paths
-
-- Test a normal local path.
-- Test a Windows user profile containing spaces.
-- Test an exchange folder containing non-ASCII characters if practical.
-
-### Failure handling
-
-- Invalid RizomUV executable.
-- RizomUV closed without saving.
-- FBX plug-in unavailable or disabled.
-- Output FBX still being written while the polling timer is active.
-- Imported FBX missing the requested UV channel.
+- Send at least three polygon objects together.
+- Confirm their object identities stay separate in RizomUV.
+- Confirm each UV result maps back to the correct source node.
 
 ## Acceptance threshold
 
-Do not label a release production-ready until all primary tests pass on 3ds Max 2027 and at least one current RizomUV build.
-
-If `ChannelInfo.PasteChannel` causes destructive stack behavior on 2027, stop and replace the return path before release.
+Do not merge the draft PR until the topology test and UV round-trip tests pass on the user's real 3ds Max 2027 + RizomUV installation.
