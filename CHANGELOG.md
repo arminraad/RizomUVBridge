@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3-alpha - 2026-10-02
+
+- Fixed FBX handoff settings that could triangulate Editable Poly topology.
+- Explicitly disabled `Triangulate`.
+- Explicitly disabled `PreserveEdgeOrientation`, which Autodesk documents as capable of converting Editable Poly objects to triangulated Editable Mesh when hidden edge turns are present.
+- Disabled `SmoothMeshExport` for topology-preserving UV exchange.
+- Added FBX exporter settings push/pop so user FBX settings are restored after bridge export.
+- Expanded static validation for topology-preservation export settings.
+
+
 ## 0.1.2-alpha - 2026-10-02
 
 - Fixed the remaining struct-member forward reference: `exchangeDir -> ensureConfig`.
