@@ -555,7 +555,7 @@ try(destroyDialog RUVB2027_UI)catch()
 
 rollout RUVB2027_UI "RizomUV Bridge 2027"
 (
-    label lbl_version ("Version " + RUVB2027.version) align:#left
+    label lbl_version "" align:#left
     label lbl_status "Ready" align:#left
 
     spinner spn_channel "UV channel:" range:[1,99,1] type:#integer fieldWidth:45
@@ -573,6 +573,7 @@ rollout RUVB2027_UI "RizomUV Bridge 2027"
     on RUVB2027_UI open do
     (
         RUVB2027.ensureConfig()
+        lbl_version.text = "Version " + RUVB2027.version
         spn_channel.value = RUVB2027.configuredUVChannel()
         chk_auto.checked = RUVB2027.autoImportEnabled()
         lbl_status.text = if RUVB2027.isMax2027OrNewer() then "Ready - 3ds Max 2027+" else "Compatibility warning"
